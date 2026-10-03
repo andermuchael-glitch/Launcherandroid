@@ -201,7 +201,7 @@ private fun AppItem(app: AppInfo, isFavorite: Boolean, onClick: () -> Unit, onTo
 }
 
 @Composable
-private fun FavoriteItem(app: AppInfo, onClick: () -> Unit) {
+private fun RowScope.FavoriteItem(app: AppInfo, onClick: () -> Unit) {
     Column(modifier = Modifier.weight(1f).clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(shape = RoundedCornerShape(17.dp), color = Color.White.copy(alpha = 0.10f)) {
             Image(bitmap = app.icon.toBitmap(96, 96).asImageBitmap(), contentDescription = app.label, modifier = Modifier.padding(7.dp).size(48.dp))
