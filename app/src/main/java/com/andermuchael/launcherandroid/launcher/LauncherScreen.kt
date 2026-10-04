@@ -525,12 +525,13 @@ private fun QuickAppItem(app: AppInfo, onClick: () -> Unit) {
 
 @Composable
 private fun RowScope.FavoriteDockItem(app: AppInfo, iconSize: Float, onClick: () -> Unit) {
+    val iconBitmap = remember(app.packageName) { app.icon.toBitmap(96, 96).asImageBitmap() }
     Column(
         modifier = Modifier.weight(1f).clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Image(
-            bitmap = app.icon.toBitmap(96, 96).asImageBitmap(),
+            bitmap = iconBitmap,
             contentDescription = app.label,
             modifier = Modifier.size(48.dp).clip(RoundedCornerShape(14.dp))
         )
@@ -589,9 +590,10 @@ private fun AppItem(app: AppInfo, isFavorite: Boolean, onClick: () -> Unit, onTo
 
 @Composable
 private fun RowScope.FavoriteItem(app: AppInfo, onClick: () -> Unit) {
+    val iconBitmap = remember(app.packageName) { app.icon.toBitmap(96, 96).asImageBitmap() }
     Column(modifier = Modifier.weight(1f).clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(shape = RoundedCornerShape(17.dp), color = Color.White.copy(alpha = 0.10f)) {
-            Image(bitmap = app.icon.toBitmap(96, 96).asImageBitmap(), contentDescription = app.label, modifier = Modifier.padding(7.dp).size(48.dp))
+            Image(bitmap = iconBitmap, contentDescription = app.label, modifier = Modifier.padding(7.dp).size(48.dp))
         }
         Text(app.label, color = Color.White.copy(alpha = 0.82f), maxLines = 1, textAlign = TextAlign.Center,
             style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 5.dp))
@@ -601,7 +603,8 @@ private fun RowScope.FavoriteItem(app: AppInfo, onClick: () -> Unit) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AppIcon(app: AppInfo, onClick: () -> Unit, onLongPress: () -> Unit) {
-    Image(bitmap = app.icon.toBitmap(112, 112).asImageBitmap(), contentDescription = app.label,
+    val iconBitmap = remember(app.packageName) { app.icon.toBitmap(112, 112).asImageBitmap() }
+    Image(bitmap = iconBitmap, contentDescription = app.label,
         modifier = Modifier.size(62.dp).clip(RoundedCornerShape(17.dp)).combinedClickable(onClick = onClick, onLongClick = onLongPress))
 }
 
