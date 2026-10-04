@@ -318,7 +318,19 @@ private fun MinimalFavoriteItem(app: AppInfo, iconSize: Float, onClick: () -> Un
         modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(15.dp)).clickable(onClick = onClick).padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Image(bitmap = iconBitmap, contentDescription = app.label, modifier = Modifier.size(iconSize.coerceIn(38f, 48f).dp).clip(RoundedCornerShape(14.dp)))
+        Surface(
+            shape = RoundedCornerShape(13.dp),
+            color = Color.White.copy(alpha = 0.08f)
+        ) {
+            Image(
+                bitmap = iconBitmap,
+                contentDescription = app.label,
+                modifier = Modifier
+                    .padding(4.dp)
+                    .size(iconSize.coerceIn(36f, 44f).dp)
+                    .clip(RoundedCornerShape(11.dp))
+            )
+        }
         Spacer(Modifier.width(11.dp))
         Text(app.label, color = Color.White.copy(alpha = 0.92f), style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp), maxLines = 1)
     }
