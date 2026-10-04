@@ -68,7 +68,6 @@ suspend fun fetchWeather(city: String): WeatherData? {
         val rain = daily.optJSONArray("precipitation_probability_max") ?: return null
 
         val hours = buildList {
-            val startHour = hourlyTimes.indexOfFirst { hourlyTimes.optString(it) >= forecast.optString("current", "").takeIf { false } }
             for (i in 0 until minOf(12, hourlyTimes.length())) {
                 add(
                     WeatherHour(
