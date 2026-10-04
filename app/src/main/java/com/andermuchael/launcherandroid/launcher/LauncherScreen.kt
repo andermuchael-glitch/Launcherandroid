@@ -3,9 +3,15 @@ package com.andermuchael.launcherandroid.launcher
 import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
+import android.app.WallpaperManager
+import java.io.File
+import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import android.net.Uri
 import android.util.Base64
 import androidx.compose.foundation.Image
+import coil.compose.AsyncImage
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -34,10 +40,12 @@ import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -53,6 +61,8 @@ import com.andermuchael.launcherandroid.model.AppInfo
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun LauncherScreen() {
@@ -69,6 +79,8 @@ fun LauncherScreen() {
     var theme by remember { mutableStateOf(prefs.getString("theme", "azul") ?: "azul") }
     var iconSize by remember { mutableFloatStateOf(prefs.getFloat("icon_size", 48f)) }
     var wallpaperUri by remember { mutableStateOf(prefs.getString("wallpaper_uri", null)) }
+    var wallpaperDownloading by remember { mutableStateOf(false) }
+    var wallpaperMessage by remember { mutableStateOf<String?>(null) }
     var folders by remember { mutableStateOf(loadFolders(prefs)) }
     var folderDialog by remember { mutableStateOf(false) }
     var selectedFolder by remember { mutableStateOf<LauncherFolder?>(null) }
@@ -76,7 +88,7 @@ fun LauncherScreen() {
     var addToFolderApp by remember { mutableStateOf<AppInfo?>(null) }
 
     LaunchedEffect(Unit) {
-        apps = repository.getLaunchableApps()
+        apps = withContext(Dispatchers.IO) { repository.getLaunchableApps() }
         favorites = context.getSharedPreferences("launcher", 0)
             .getStringSet("favorites", emptySet())?.toList() ?: emptyList()
     }
@@ -84,7 +96,11 @@ fun LauncherScreen() {
     val filteredApps = apps.filter { query.isBlank() || it.label.contains(query, ignoreCase = true) }
     val favoriteApps = favorites.mapNotNull { pkg -> apps.find { it.packageName == pkg } }
 
-    val wallpaperBitmap = remember(wallpaperUri) { wallpaperUri?.let { runCatching { context.contentResolver.openInputStream(Uri.parse(it))?.use(BitmapFactory::decodeStream)?.asImageBitmap() }.getOrNull() } }
+    val wallpaperBitmap by produceState<ImageBitmap?>(initialValue = null, key1 = wallpaperUri) {
+        value = withContext(Dispatchers.IO) {
+            wallpaperUri?.let { runCatching { context.contentResolver.openInputStream(Uri.parse(it))?.use(BitmapFactory::decodeStream)?.asImageBitmap() }.getOrNull() }
+        }
+    }
     val wallpaperPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) { wallpaperUri = uri.toString(); prefs.edit().putString("wallpaper_uri", uri.toString()).apply() }
     }
@@ -107,8 +123,22 @@ fun LauncherScreen() {
             theme = theme,
             iconSize = iconSize,
             hasWallpaper = wallpaperBitmap != null,
+            wallpaperDownloading = wallpaperDownloading,
+            wallpaperMessage = wallpaperMessage,
             onPickWallpaper = { wallpaperPicker.launch("image/*") },
             onRemoveWallpaper = { wallpaperUri = null; prefs.edit().remove("wallpaper_uri").apply() },
+            onSelectOnlineWallpaper = { option ->
+                wallpaperDownloading = true
+                wallpaperMessage = null
+                downloadAndApplyWallpaper(context, option) { uri, message ->
+                    wallpaperDownloading = false
+                    if (uri != null) {
+                        wallpaperUri = uri.toString()
+                        prefs.edit().putString("wallpaper_uri", uri.toString()).apply()
+                    }
+                    wallpaperMessage = message
+                }
+            },
             onTheme = { theme = it; prefs.edit().putString("theme", it).apply() },
             onIconSize = { iconSize = it; prefs.edit().putFloat("icon_size", it).apply() },
             onShowDate = { showDate = it; context.getSharedPreferences("launcher", 0).edit().putBoolean("show_date", it).apply() },
@@ -292,7 +322,10 @@ private fun LauncherSettings(
     theme: String,
     iconSize: Float,
     hasWallpaper: Boolean,
+    wallpaperDownloading: Boolean,
+    wallpaperMessage: String?,
     onPickWallpaper: () -> Unit,
+    onSelectOnlineWallpaper: (WallpaperOption) -> Unit,
     onRemoveWallpaper: () -> Unit,
     onTheme: (String) -> Unit,
     onIconSize: (Float) -> Unit,
@@ -330,6 +363,40 @@ private fun LauncherSettings(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = onPickWallpaper, shape = RoundedCornerShape(14.dp), modifier = Modifier.weight(1f)) { Text("Escolher imagem") }
                     if (hasWallpaper) OutlinedButton(onClick = onRemoveWallpaper, shape = RoundedCornerShape(14.dp)) { Text("Remover") }
+                }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = Color.White.copy(alpha = 0.08f)) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Papéis sugeridos", color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text("Coleção COSMIC/Pop!_OS em alta resolução. O download só acontece quando você escolher.", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(12.dp))
+                androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items(cosmicWallpapers) { option ->
+                        Surface(
+                            modifier = Modifier.width(190.dp).height(118.dp).clickable(enabled = !wallpaperDownloading) { onSelectOnlineWallpaper(option) },
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color.White.copy(alpha = 0.06f)
+                        ) {
+                            Box {
+                                AsyncImage(model = option.url, contentDescription = option.name, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                                Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.30f)))
+                                Column(modifier = Modifier.align(Alignment.BottomStart).padding(10.dp)) {
+                                    Text(option.name, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                                    Text("Toque para aplicar", color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        }
+                    }
+                }
+                if (wallpaperDownloading) {
+                    Spacer(Modifier.height(10.dp))
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+                wallpaperMessage?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
