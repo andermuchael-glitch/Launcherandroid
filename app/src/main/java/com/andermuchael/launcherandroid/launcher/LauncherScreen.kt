@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -68,6 +69,7 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 @Composable
 fun LauncherScreen() {
@@ -105,7 +107,14 @@ fun LauncherScreen() {
     val favoriteApps = favorites.mapNotNull { pkg -> apps.find { it.packageName == pkg } }
 
     val weather by produceState<WeatherData?>(initialValue = null, key1 = weatherCity) {
-        value = if (weatherCity.isBlank()) null else withContext(Dispatchers.IO) { fetchWeather(weatherCity) }
+        if (weatherCity.isBlank()) {
+            value = null
+        } else {
+            while (true) {
+                value = withContext(Dispatchers.IO) { fetchWeather(weatherCity) }
+                delay(60 * 60 * 1000L)
+            }
+        }
     }
 
     val wallpaperBitmap by produceState<ImageBitmap?>(initialValue = null, key1 = wallpaperUri) {
@@ -378,53 +387,32 @@ private fun WeatherCard(weather: WeatherData?, configuredCity: String) {
                     color = Color.White.copy(alpha = 0.7f)
                 )
                 Spacer(Modifier.width(8.dp))
-                Text(
-                    "Carregando clima de $configuredCity…",
-                    color = Color.White.copy(alpha = 0.62f),
-                    style = MaterialTheme.typography.labelSmall
-                )
+                Text("Carregando clima de $configuredCity…", color = Color.White.copy(alpha = 0.62f), style = MaterialTheme.typography.labelSmall)
             }
         } else {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(weatherEmoji(weather.code), fontSize = 24.sp)
-                Spacer(Modifier.width(8.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        weather.city,
-                        color = Color.White.copy(alpha = 0.72f),
-                        style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1
-                    )
-                    Text(
-                        weatherDescription(weather.code),
-                        color = Color.White.copy(alpha = 0.94f),
-                        style = MaterialTheme.typography.bodySmall
-                    )
+            Column(modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(weatherEmoji(weather.code), fontSize = 24.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(weather.city, color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                        Text(weatherDescription(weather.code), color = Color.White.copy(alpha = 0.94f), style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text(weather.temperature.roundToInt().toString() + "°", color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Light)
                 }
-                Text(
-                    weather.temperature.roundToInt().toString() + "°",
-                    color = Color.White,
-                    fontSize = 27.sp,
-                    fontWeight = FontWeight.Light
-                )
-                Spacer(Modifier.width(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    weather.days.take(3).forEach { day ->
+                Spacer(Modifier.height(6.dp))
+                Text("Próximas horas", color = Color.White.copy(alpha = 0.45f), style = MaterialTheme.typography.labelSmall)
+                Spacer(Modifier.height(3.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(13.dp), contentPadding = PaddingValues(end = 4.dp)) {
+                    items(weather.hours.take(10)) { hour ->
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                day.date.substringAfter("-").replace("-", "/"),
-                                color = Color.White.copy(alpha = 0.42f),
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                            Text(weatherEmoji(day.code), fontSize = 12.sp)
-                            Text(
-                                day.max.roundToInt().toString() + "°",
-                                color = Color.White.copy(alpha = 0.72f),
-                                style = MaterialTheme.typography.labelSmall
-                            )
+                            val hourLabel = hour.time.substringAfter("T").take(2) + "h"
+                            Text(hourLabel, color = Color.White.copy(alpha = 0.58f), style = MaterialTheme.typography.labelSmall)
+                            Text(weatherEmoji(hour.code), fontSize = 15.sp)
+                            Text(hour.temperature.roundToInt().toString() + "°", color = Color.White.copy(alpha = 0.88f), style = MaterialTheme.typography.labelSmall)
+                            if (hour.rainProbability > 0) {
+                                Text(hour.rainProbability.toString() + "%", color = Color.White.copy(alpha = 0.38f), fontSize = 9.sp)
+                            }
                         }
                     }
                 }
@@ -432,7 +420,6 @@ private fun WeatherCard(weather: WeatherData?, configuredCity: String) {
         }
     }
 }
-
 @Composable
 private fun QuickNotesWidget(
     notes: List<String>,
