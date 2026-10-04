@@ -29,7 +29,22 @@ data class WeatherData(
     val hours: List<WeatherHour>
 )
 
-suspend fun fetchWeather(city: String): WeatherData? {
+suspend private object WeatherMemoryCache {
+    var city: String = ""
+    var data: WeatherData? = null
+    var loadedAt: Long = 0L
+}
+
+fun fetchWeather(city: String): WeatherData? {
+    val normalizedCity = city.trim()
+    val now = System.currentTimeMillis()
+    if (normalizedCity.isNotBlank() &&
+        WeatherMemoryCache.city.equals(normalizedCity, ignoreCase = true) &&
+        WeatherMemoryCache.data != null &&
+        now - WeatherMemoryCache.loadedAt < 50 * 60 * 1000L
+    ) {
+        return WeatherMemoryCache.data
+    }
     return runCatching {
         val encoded = URLEncoder.encode(city.trim(), "UTF-8")
         val geoUrl = URL(
