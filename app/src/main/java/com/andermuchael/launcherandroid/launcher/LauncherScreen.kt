@@ -52,8 +52,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.awaitPointerEvent
-import androidx.compose.ui.input.pointer.consume
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -640,13 +638,11 @@ private fun AppDrawer(
                                     if (target != null) scope.launch { listState.scrollToItem(target) }
                                 }
                                 jump(down.position.y)
-                                down.consume()
                                 while (true) {
                                     val event = awaitPointerEvent()
                                     val change = event.changes.firstOrNull() ?: break
                                     if (!change.pressed) break
                                     jump(change.position.y)
-                                    change.consume()
                                 }
                             }
                         },
