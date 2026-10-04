@@ -350,33 +350,69 @@ private fun ClockAndDate(showDate: Boolean) {
 
 @Composable
 private fun WeatherCard(weather: WeatherData?, configuredCity: String) {
-    Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = Color.White.copy(alpha = 0.08f)) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = Color.White.copy(alpha = 0.09f)
+    ) {
         if (weather == null) {
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White.copy(alpha = 0.7f))
-                Spacer(Modifier.width(10.dp))
-                Text("Carregando clima de $configuredCity…", color = Color.White.copy(alpha = 0.65f), style = MaterialTheme.typography.bodySmall)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "Carregando clima de $configuredCity…",
+                    color = Color.White.copy(alpha = 0.62f),
+                    style = MaterialTheme.typography.labelSmall
+                )
             }
         } else {
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(weatherEmoji(weather.code), fontSize = 28.sp)
-                    Spacer(Modifier.width(10.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(weather.city, color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.labelMedium, maxLines = 1)
-                        Text(weatherDescription(weather.code), color = Color.White, style = MaterialTheme.typography.bodyMedium)
-                    }
-                    Text(weather.temperature.roundToInt().toString() + "°", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Light)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(weatherEmoji(weather.code), fontSize = 24.sp)
+                Spacer(Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        weather.city,
+                        color = Color.White.copy(alpha = 0.72f),
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1
+                    )
+                    Text(
+                        weatherDescription(weather.code),
+                        color = Color.White.copy(alpha = 0.94f),
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
-                if (weather.days.size > 1) {
-                    Spacer(Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        weather.days.take(5).forEach { day ->
-                            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(day.date.substringAfter("-").replace("-", "/"), color = Color.White.copy(alpha = 0.42f), style = MaterialTheme.typography.labelSmall)
-                                Text(weatherEmoji(day.code), fontSize = 15.sp)
-                                Text(day.max.roundToInt().toString() + "° " + day.min.roundToInt().toString() + "°", color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.labelSmall)
-                            }
+                Text(
+                    weather.temperature.roundToInt().toString() + "°",
+                    color = Color.White,
+                    fontSize = 27.sp,
+                    fontWeight = FontWeight.Light
+                )
+                Spacer(Modifier.width(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    weather.days.take(3).forEach { day ->
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                day.date.substringAfter("-").replace("-", "/"),
+                                color = Color.White.copy(alpha = 0.42f),
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                            Text(weatherEmoji(day.code), fontSize = 12.sp)
+                            Text(
+                                day.max.roundToInt().toString() + "°",
+                                color = Color.White.copy(alpha = 0.72f),
+                                style = MaterialTheme.typography.labelSmall
+                            )
                         }
                     }
                 }
@@ -384,7 +420,6 @@ private fun WeatherCard(weather: WeatherData?, configuredCity: String) {
         }
     }
 }
-
 
 @Composable
 private fun QuickNotesWidget(
