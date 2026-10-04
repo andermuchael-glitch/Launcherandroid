@@ -10,6 +10,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -70,6 +71,8 @@ fun LauncherScreen() {
     var folders by remember { mutableStateOf(loadFolders(prefs)) }
     var folderDialog by remember { mutableStateOf(false) }
     var selectedFolder by remember { mutableStateOf<LauncherFolder?>(null) }
+    var longPressApp by remember { mutableStateOf<AppInfo?>(null) }
+    var addToFolderApp by remember { mutableStateOf<AppInfo?>(null) }
 
     LaunchedEffect(Unit) {
         apps = repository.getLaunchableApps()
@@ -83,6 +86,13 @@ fun LauncherScreen() {
     val wallpaperBitmap = remember(wallpaperUri) { wallpaperUri?.let { runCatching { context.contentResolver.openInputStream(Uri.parse(it))?.use(BitmapFactory::decodeStream)?.asImageBitmap() }.getOrNull() } }
     val wallpaperPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) { wallpaperUri = uri.toString(); prefs.edit().putString("wallpaper_uri", uri.toString()).apply() }
+    }
+
+    if (longPressApp != null) {
+        AppLongPressMenu(app = longPressApp!!, isFavorite = longPressApp!!.packageName in favorites, onDismiss = { longPressApp = null }, onToggleFavorite = { favorites = toggleFavorite(context, favorites, longPressApp!!.packageName); longPressApp = null }, onAddToFolder = { addToFolderApp = longPressApp; longPressApp = null }, onAppInfo = { openAppInfo(context, longPressApp!!.packageName); longPressApp = null }, onUninstall = { uninstallApp(context, longPressApp!!.packageName); longPressApp = null })
+    }
+    if (addToFolderApp != null) {
+        AddToFolderDialog(app = addToFolderApp!!, folders = folders, onDismiss = { addToFolderApp = null }, onAdd = { folder -> folders = addAppToFolder(prefs, folders, folder, addToFolderApp!!.packageName); addToFolderApp = null }, onNewFolder = { addToFolderApp = null; selectedFolder = null; folderDialog = true })
     }
 
     if (folderDialog) {
@@ -115,6 +125,7 @@ fun LauncherScreen() {
             favorites = favorites.toSet(),
             onToggleFavorite = { app -> favorites = toggleFavorite(context, favorites, app.packageName) },
             onOpen = { app -> openApp(context, app.packageName) },
+            onLongPress = { app -> longPressApp = app },
             onClose = { drawerOpen = false; query = "" }
         )
         return
@@ -375,7 +386,7 @@ private fun SettingSwitch(title: String, subtitle: String, checked: Boolean, onC
 @Composable
 private fun AppDrawer(
     apps: List<AppInfo>, query: String, onQueryChange: (String) -> Unit, favorites: Set<String>,
-    onToggleFavorite: (AppInfo) -> Unit, onOpen: (AppInfo) -> Unit, onClose: () -> Unit
+    onToggleFavorite: (AppInfo) -> Unit, onOpen: (AppInfo) -> Unit, onLongPress: (AppInfo) -> Unit, onClose: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize().background(Color(0xFF0D1420)).padding(horizontal = 16.dp, vertical = 20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -413,7 +424,7 @@ private fun AppDrawer(
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             items(organizedApps, key = { it.packageName }) { app ->
-                AppItem(app, app.packageName in favorites, { onOpen(app) }, { onToggleFavorite(app) })
+                AppItem(app, app.packageName in favorites, { onOpen(app) }, { onToggleFavorite(app) }, { onLongPress(app) })
             }
         }
     }
@@ -489,10 +500,10 @@ private fun RowScope.AddFavoriteItem(onClick: () -> Unit) {
 }
 
 @Composable
-private fun AppItem(app: AppInfo, isFavorite: Boolean, onClick: () -> Unit, onToggleFavorite: () -> Unit) {
+private fun AppItem(app: AppInfo, isFavorite: Boolean, onClick: () -> Unit, onToggleFavorite: () -> Unit, onLongPress: () -> Unit) {
     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Box {
-            AppIcon(app, onClick)
+            AppIcon(app, onClick, onLongPress)
             Surface(modifier = Modifier.size(26.dp).align(Alignment.TopEnd), shape = CircleShape, color = Color(0xFF0D1420).copy(alpha = 0.92f)) {
                 IconButton(onClick = onToggleFavorite) {
                     Icon(if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder, contentDescription = "Favorito",
@@ -517,9 +528,9 @@ private fun RowScope.FavoriteItem(app: AppInfo, onClick: () -> Unit) {
 }
 
 @Composable
-private fun AppIcon(app: AppInfo, onClick: () -> Unit) {
+private fun AppIcon(app: AppInfo, onClick: () -> Unit, onLongPress: () -> Unit) {
     Image(bitmap = app.icon.toBitmap(112, 112).asImageBitmap(), contentDescription = app.label,
-        modifier = Modifier.size(62.dp).clip(RoundedCornerShape(17.dp)).clickable(onClick = onClick))
+        modifier = Modifier.size(62.dp).clip(RoundedCornerShape(17.dp)).combinedClickable(onClick = onClick, onLongClick = onLongPress))
 }
 
 data class LauncherFolder(val id: String, val name: String, val packages: List<String>)
@@ -581,6 +592,64 @@ private fun FolderEditorDialog(
         confirmButton = { Button(onClick = { if (name.isNotBlank()) onSave(LauncherFolder(initial?.id ?: System.currentTimeMillis().toString(), name.trim(), selected.toList()))) }) { Text("Salvar") } },
         dismissButton = { Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { if (initial != null) TextButton(onClick = { onDelete(initial) }) { Text("Excluir") }; TextButton(onClick = onDismiss) { Text("Cancelar") } } }
     )
+}
+@Composable
+private fun AppLongPressMenu(app: AppInfo, isFavorite: Boolean, onDismiss: () -> Unit, onToggleFavorite: () -> Unit, onAddToFolder: () -> Unit, onAppInfo: () -> Unit, onUninstall: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Image(bitmap = app.icon.toBitmap(80, 80).asImageBitmap(), contentDescription = null, modifier = Modifier.size(46.dp).clip(RoundedCornerShape(12.dp)))
+                Spacer(Modifier.width(12.dp))
+                Text(app.label, maxLines = 2)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = onToggleFavorite, modifier = Modifier.fillMaxWidth()) { Icon(if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder, contentDescription = null); Spacer(Modifier.width(12.dp)); Text(if (isFavorite) "Remover dos favoritos" else "Adicionar aos favoritos", modifier = Modifier.weight(1f), textAlign = TextAlign.Start) }
+                TextButton(onClick = onAddToFolder, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Folder, contentDescription = null); Spacer(Modifier.width(12.dp)); Text("Adicionar a uma pasta", modifier = Modifier.weight(1f), textAlign = TextAlign.Start) }
+                TextButton(onClick = onAppInfo, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Settings, contentDescription = null); Spacer(Modifier.width(12.dp)); Text("Informações do app", modifier = Modifier.weight(1f), textAlign = TextAlign.Start) }
+                TextButton(onClick = onUninstall, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Close, contentDescription = null); Spacer(Modifier.width(12.dp)); Text("Desinstalar", modifier = Modifier.weight(1f), textAlign = TextAlign.Start) }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+    )
+}
+
+@Composable
+private fun AddToFolderDialog(app: AppInfo, folders: List<LauncherFolder>, onDismiss: () -> Unit, onAdd: (LauncherFolder) -> Unit, onNewFolder: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Adicionar a uma pasta") },
+        text = {
+            if (folders.isEmpty()) Text("Você ainda não criou nenhuma pasta.")
+            else LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
+                items(folders, key = { it.id }) { folder ->
+                    Row(modifier = Modifier.fillMaxWidth().clickable { onAdd(folder) }, verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Folder, contentDescription = null, tint = Color(0xFFFFC857))
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f).padding(vertical = 9.dp)) { Text(folder.name, fontWeight = FontWeight.Medium); Text("${folder.packages.size} aplicativos", style = MaterialTheme.typography.bodySmall, color = Color.Gray) }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onNewFolder) { Icon(Icons.Default.Add, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Nova pasta") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+    )
+}
+
+private fun addAppToFolder(prefs: android.content.SharedPreferences, folders: List<LauncherFolder>, folder: LauncherFolder, packageName: String): List<LauncherFolder> {
+    if (packageName in folder.packages) return folders
+    return upsertFolder(prefs, folders, folder.copy(packages = (folder.packages + packageName).distinct()))
+}
+
+private fun openAppInfo(context: Context, packageName: String) {
+    context.startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply { data = Uri.parse("package:$packageName") })
+}
+
+private fun uninstallApp(context: Context, packageName: String) {
+    context.startActivity(Intent(Intent.ACTION_DELETE).apply { data = Uri.parse("package:$packageName") })
 }
 private fun openApp(context: Context, packageName: String) {
     context.packageManager.getLaunchIntentForPackage(packageName)?.let { it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); context.startActivity(it) }
