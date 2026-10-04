@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.util.Base64
 import androidx.compose.foundation.Image
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -14,6 +15,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -23,6 +26,9 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -61,6 +67,9 @@ fun LauncherScreen() {
     var theme by remember { mutableStateOf(prefs.getString("theme", "azul") ?: "azul") }
     var iconSize by remember { mutableFloatStateOf(prefs.getFloat("icon_size", 48f)) }
     var wallpaperUri by remember { mutableStateOf(prefs.getString("wallpaper_uri", null)) }
+    var folders by remember { mutableStateOf(loadFolders(prefs)) }
+    var folderDialog by remember { mutableStateOf(false) }
+    var selectedFolder by remember { mutableStateOf<LauncherFolder?>(null) }
 
     LaunchedEffect(Unit) {
         apps = repository.getLaunchableApps()
@@ -74,6 +83,10 @@ fun LauncherScreen() {
     val wallpaperBitmap = remember(wallpaperUri) { wallpaperUri?.let { runCatching { context.contentResolver.openInputStream(Uri.parse(it))?.use(BitmapFactory::decodeStream)?.asImageBitmap() }.getOrNull() } }
     val wallpaperPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) { wallpaperUri = uri.toString(); prefs.edit().putString("wallpaper_uri", uri.toString()).apply() }
+    }
+
+    if (folderDialog) {
+        FolderEditorDialog(apps = apps, initial = selectedFolder, onDismiss = { folderDialog = false; selectedFolder = null }, onSave = { folder -> folders = upsertFolder(prefs, folders, folder); folderDialog = false; selectedFolder = null }, onDelete = { folder -> folders = folders.filterNot { it.id == folder.id }; saveFolders(prefs, folders); folderDialog = false; selectedFolder = null })
     }
 
     if (settingsOpen) {
@@ -133,6 +146,27 @@ fun LauncherScreen() {
             SearchField(value = query, onQueryChange = { query = it; drawerOpen = true })
             Spacer(Modifier.height(if (compactMode) 20.dp else 30.dp))
 
+
+            if (folders.isNotEmpty()) {
+                Text("Pastas", modifier = Modifier.fillMaxWidth().padding(start = 4.dp), color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(10.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    folders.take(4).forEach { folder ->
+                        Surface(modifier = Modifier.weight(1f).clickable { selectedFolder = folder; folderDialog = true }, shape = RoundedCornerShape(18.dp), color = Color.White.copy(alpha = 0.085f)) {
+                            Column(modifier = Modifier.padding(vertical = 12.dp, horizontal = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.Folder, contentDescription = null, tint = Color(0xFFFFC857))
+                                Text(folder.name, color = Color.White, maxLines = 1, style = MaterialTheme.typography.labelMedium)
+                                Text("${folder.packages.size} apps", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                    if (folders.size < 4) Surface(modifier = Modifier.weight(1f).clickable { folderDialog = true }, shape = RoundedCornerShape(18.dp), color = Color.White.copy(alpha = 0.05f)) {
+                        Column(modifier = Modifier.padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Add, contentDescription = "Nova pasta", tint = Color.White.copy(alpha = 0.7f)); Text("Nova pasta", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.labelMedium) }
+                    }
+                }
+                Spacer(Modifier.height(18.dp))
+            }
+
             Text(
                 "Favoritos",
                 modifier = Modifier.fillMaxWidth().padding(start = 4.dp),
@@ -182,7 +216,7 @@ fun LauncherScreen() {
                     Text("Aplicativos", fontWeight = FontWeight.SemiBold)
                 }
                 FilledTonalButton(
-                    onClick = { settingsOpen = true },
+                    onClick = { folderDialog = true },
                     modifier = Modifier.weight(1f).height(54.dp),
                     shape = RoundedCornerShape(18.dp),
                     colors = ButtonDefaults.filledTonalButtonColors(
@@ -190,9 +224,9 @@ fun LauncherScreen() {
                         contentColor = Color.White
                     )
                 ) {
-                    Icon(Icons.Default.MoreVert, contentDescription = null)
+                    Icon(Icons.Default.Folder, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Configurações", fontWeight = FontWeight.SemiBold)
+                    Text("Nova pasta", fontWeight = FontWeight.SemiBold)
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -360,15 +394,25 @@ private fun AppDrawer(
                 }
             }
         }
-        Spacer(Modifier.height(18.dp))
-        Text("${apps.size} aplicativos", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.labelMedium)
+        var category by remember { mutableStateOf("Todos") }
+        var sortAz by remember { mutableStateOf(true) }
+        val categories = listOf("Todos", "Comunicação", "Trabalho", "Financeiro", "Social", "Entretenimento", "Ferramentas", "Outros")
+        val organizedApps = apps.filter { category == "Todos" || appCategory(it) == category }.let { list -> if (sortAz) list.sortedBy { it.label.lowercase(Locale("pt", "BR")) } else list.sortedByDescending { it.label.lowercase(Locale("pt", "BR")) } }
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("${organizedApps.size} aplicativos", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+            IconButton(onClick = { sortAz = !sortAz }) { Icon(Icons.Default.Sort, contentDescription = "Ordenar", tint = Color.White.copy(alpha = 0.75f)) }
+        }
+        androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp), contentPadding = PaddingValues(vertical = 2.dp)) {
+            items(categories) { item -> FilterChip(selected = category == item, onClick = { category = item }, label = { Text(item, maxLines = 1) }) }
+        }
         Spacer(Modifier.height(8.dp))
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = 82.dp), modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 24.dp, top = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            items(apps, key = { it.packageName }) { app ->
+            items(organizedApps, key = { it.packageName }) { app ->
                 AppItem(app, app.packageName in favorites, { onOpen(app) }, { onToggleFavorite(app) })
             }
         }
@@ -478,6 +522,66 @@ private fun AppIcon(app: AppInfo, onClick: () -> Unit) {
         modifier = Modifier.size(62.dp).clip(RoundedCornerShape(17.dp)).clickable(onClick = onClick))
 }
 
+data class LauncherFolder(val id: String, val name: String, val packages: List<String>)
+
+private fun appCategory(app: AppInfo): String {
+    val s = (app.label + " " + app.packageName).lowercase(Locale("pt", "BR"))
+    return when {
+        listOf("whatsapp", "telegram", "mensag", "sms", "mail", "gmail", "email").any { s.contains(it) } -> "Comunicação"
+        listOf("nubank", "banco", "bradesco", "inter", "finance", "pix", "carteira", "mercado pago", "pag").any { s.contains(it) } -> "Financeiro"
+        listOf("facebook", "instagram", "tiktok", "twitter", "x.com", "social").any { s.contains(it) } -> "Social"
+        listOf("netflix", "youtube", "spotify", "music", "jogo", "game", "bowling").any { s.contains(it) } -> "Entretenimento"
+        listOf("trello", "drive", "docs", "office", "work", "calendar", "agenda", "canva").any { s.contains(it) } -> "Trabalho"
+        listOf("config", "calcul", "arquivo", "file", "cleaner", "chip", "alexa", "ferrament").any { s.contains(it) } -> "Ferramentas"
+        else -> "Outros"
+    }
+}
+
+private fun loadFolders(prefs: android.content.SharedPreferences): List<LauncherFolder> {
+    return prefs.getStringSet("folders", emptySet()).orEmpty().mapNotNull { raw ->
+        val p = raw.split("|", limit = 3)
+        if (p.size == 3) runCatching { LauncherFolder(p[0], String(Base64.decode(p[1], Base64.NO_WRAP), Charsets.UTF_8), p[2].split(",").filter { it.isNotBlank() }) }.getOrNull() else null
+    }
+}
+
+private fun saveFolders(prefs: android.content.SharedPreferences, folders: List<LauncherFolder>) {
+    prefs.edit().putStringSet("folders", folders.map { "${it.id}|${Base64.encodeToString(it.name.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)}|${it.packages.joinToString(",")}" }.toSet()).apply()
+}
+
+private fun upsertFolder(prefs: android.content.SharedPreferences, folders: List<LauncherFolder>, folder: LauncherFolder): List<LauncherFolder> {
+    val next = (folders.filterNot { it.id == folder.id } + folder).take(8)
+    saveFolders(prefs, next)
+    return next
+}
+
+@Composable
+private fun FolderEditorDialog(
+    apps: List<AppInfo>, initial: LauncherFolder?, onDismiss: () -> Unit, onSave: (LauncherFolder) -> Unit, onDelete: (LauncherFolder) -> Unit
+) {
+    var name by remember { mutableStateOf(initial?.name ?: "") }
+    val selected = remember { mutableStateListOf<String>().apply { addAll(initial?.packages ?: emptyList()) } }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (initial == null) "Nova pasta" else "Editar pasta") },
+        text = {
+            Column {
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nome da pasta") }, singleLine = true)
+                Spacer(Modifier.height(8.dp))
+                Text("Escolha os aplicativos", style = MaterialTheme.typography.labelLarge)
+                LazyColumn(modifier = Modifier.heightIn(max = 280.dp)) {
+                    items(apps.sortedBy { it.label.lowercase() }, key = { it.packageName }) { app ->
+                        Row(modifier = Modifier.fillMaxWidth().clickable { if (selected.contains(app.packageName)) selected.remove(app.packageName) else selected.add(app.packageName) }.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = selected.contains(app.packageName), onCheckedChange = { if (it) selected.add(app.packageName) else selected.remove(app.packageName) })
+                            Text(app.label, maxLines = 1)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { Button(onClick = { if (name.isNotBlank()) onSave(LauncherFolder(initial?.id ?: System.currentTimeMillis().toString(), name.trim(), selected.toList()))) }) { Text("Salvar") } },
+        dismissButton = { Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { if (initial != null) TextButton(onClick = { onDelete(initial) }) { Text("Excluir") }; TextButton(onClick = onDismiss) { Text("Cancelar") } } }
+    )
+}
 private fun openApp(context: Context, packageName: String) {
     context.packageManager.getLaunchIntentForPackage(packageName)?.let { it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); context.startActivity(it) }
 }
