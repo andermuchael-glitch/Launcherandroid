@@ -29,7 +29,7 @@ data class WeatherData(
     val hours: List<WeatherHour>
 )
 
-suspend private object WeatherMemoryCache {
+private object WeatherMemoryCache {
     var city: String = ""
     var data: WeatherData? = null
     var loadedAt: Long = 0L
@@ -115,7 +115,11 @@ fun fetchWeather(city: String): WeatherData? {
             code = current.optInt("weather_code"),
             days = days,
             hours = hours
-        )
+        ).also {
+            WeatherMemoryCache.city = normalizedCity
+            WeatherMemoryCache.data = it
+            WeatherMemoryCache.loadedAt = System.currentTimeMillis()
+        }
     }.getOrNull()
 }
 
