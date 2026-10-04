@@ -597,7 +597,8 @@ private fun LauncherSettings(
                 Slider(value = iconSize, onValueChange = onIconSize, valueRange = 36f..52f, steps = 7)
             }
         }
-        Spacer(Modifier.height(24.dp))        Text("Sistema", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(24.dp))
+        Text("Sistema", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
         OutlinedButton(
             onClick = onSetDefaultLauncher,
@@ -610,13 +611,8 @@ private fun LauncherSettings(
     }
 }
 
-private fun launcherBackground(theme: String): Brush {
-    return when (theme) {
-        "preto" -> Brush.verticalGradient(listOf(Color(0xFF050505), Color(0xFF111111), Color(0xFF000000)))
-        "claro" -> Brush.verticalGradient(listOf(Color(0xFFE8EEF5), Color(0xFFD3DDE8), Color(0xFFBFCBDA)))
-        else -> Brush.verticalGradient(listOf(Color(0xFF101827), Color(0xFF18283B), Color(0xFF0B111C)))
-    }
-}
+private fun launcherBackground(): Brush =
+    Brush.verticalGradient(listOf(Color(0xFF080B10), Color(0xFF10151D), Color(0xFF06080C)))
 
 @Composable
 private fun SettingSwitch(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
