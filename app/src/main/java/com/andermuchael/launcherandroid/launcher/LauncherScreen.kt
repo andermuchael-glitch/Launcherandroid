@@ -1172,8 +1172,11 @@ private fun saveQuickNotes(prefs: android.content.SharedPreferences, notes: List
     prefs.edit().putStringSet("quick_notes", notes.takeLast(5).toSet()).apply()
 }
 
-private fun openApp(context: Context, packageName: String)
-    context.packageManager.getLaunchIntentForPackage(packageName)?.let { it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); context.startActivity(it) }
+private fun openApp(context: Context, packageName: String) {
+    context.packageManager.getLaunchIntentForPackage(packageName)?.let {
+        it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(it)
+    }
 }
 
 private fun toggleFavorite(context: Context, current: List<String>, packageName: String): List<String> {
