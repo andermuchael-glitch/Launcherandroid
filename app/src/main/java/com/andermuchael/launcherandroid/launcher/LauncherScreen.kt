@@ -210,13 +210,6 @@ fun LauncherScreen() {
                 .fillMaxSize()
                 .padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 8.dp)
         ) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                IconButton(onClick = { settingsOpen = true }) {
-                    Icon(Icons.Default.Settings, contentDescription = "Configurações", tint = Color.White.copy(alpha = 0.68f))
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
             ClockAndDate(showDate = showDate)
             if (weatherCity.isNotBlank()) {
                 Spacer(Modifier.height(10.dp))
@@ -288,18 +281,31 @@ fun LauncherScreen() {
             Text("Favoritos", color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.labelLarge)
             Spacer(Modifier.height(8.dp))
 
-            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                repeat(5) { index ->
-                    val app = favoriteApps.getOrNull(index)
-                    if (app != null) {
-                        MinimalFavoriteItem(app = app, iconSize = iconSize) { openApp(context, app.packageName) }
-                    } else {
-                        MinimalAddFavoriteItem { drawerOpen = true }
-                    }
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                items(favoriteApps.take(12), key = { it.packageName }) { app ->
+                    MinimalFavoriteItem(app = app, iconSize = iconSize) { openApp(context, app.packageName) }
+                }
+                item {
+                    MinimalAddFavoriteItem { drawerOpen = true }
                 }
             }
 
             Spacer(Modifier.weight(1f))
+
+            TextButton(
+                onClick = { settingsOpen = true },
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+                colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = 0.62f))
+            ) {
+                Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(7.dp))
+                Text("Configurar")
+            }
+
+            Spacer(Modifier.height(4.dp))
 
             FilledTonalButton(
                 onClick = { drawerOpen = true },
@@ -1109,7 +1115,7 @@ private fun openApp(context: Context, packageName: String) {
 }
 
 private fun toggleFavorite(context: Context, current: List<String>, packageName: String): List<String> {
-    val next = if (packageName in current) current.filterNot { it == packageName } else (current + packageName).take(5)
+    val next = if (packageName in current) current.filterNot { it == packageName } else (current + packageName).take(12)
     context.getSharedPreferences("launcher", 0).edit().putStringSet("favorites", next.toSet()).apply()
     return next
 }
