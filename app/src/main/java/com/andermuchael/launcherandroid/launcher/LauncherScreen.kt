@@ -168,115 +168,129 @@ fun LauncherScreen() {
             .fillMaxSize()
             .background(launcherBackground(theme))
             .pointerInput(Unit) {
-                detectVerticalDragGestures { _, dragAmount -> if (dragAmount < -24f) drawerOpen = true }
+                detectVerticalDragGestures { _, dragAmount ->
+                    if (dragAmount < -24f) drawerOpen = true
+                }
             }
-            .padding(horizontal = 20.dp, vertical = 28.dp)
+            .padding(horizontal = 24.dp, vertical = 24.dp)
     ) {
         val currentWallpaper = wallpaperBitmap
         if (currentWallpaper != null) {
             Image(bitmap = currentWallpaper, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.42f)))
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.48f)))
         }
-        Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Launcher", color = Color.White.copy(alpha = 0.82f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 IconButton(onClick = { settingsOpen = true }) {
-                    Icon(Icons.Default.Settings, contentDescription = "Configurações do Launcher", tint = Color.White.copy(alpha = 0.8f))
+                    Icon(Icons.Default.Settings, contentDescription = "Configurações", tint = Color.White.copy(alpha = 0.68f))
                 }
             }
-            Spacer(Modifier.height(24.dp))
-            ClockAndDate(showDate = showDate)
-            Spacer(Modifier.height(if (compactMode) 16.dp else 26.dp))
-            SearchField(value = query, onQueryChange = { query = it; drawerOpen = true })
-            Spacer(Modifier.height(if (compactMode) 20.dp else 30.dp))
 
+            Spacer(Modifier.height(8.dp))
+            ClockAndDate(showDate = showDate)
+            Spacer(Modifier.height(if (compactMode) 18.dp else 28.dp))
+            SearchField(value = query, onQueryChange = { query = it; drawerOpen = true })
 
             if (folders.isNotEmpty()) {
-                Text("Pastas", modifier = Modifier.fillMaxWidth().padding(start = 4.dp), color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(24.dp))
+                Text("Pastas", color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.labelLarge)
+                Spacer(Modifier.height(8.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    folders.take(4).forEach { folder ->
-                        Surface(modifier = Modifier.weight(1f).clickable { selectedFolder = folder; folderDialog = true }, shape = RoundedCornerShape(18.dp), color = Color.White.copy(alpha = 0.085f)) {
-                            Column(modifier = Modifier.padding(vertical = 12.dp, horizontal = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Default.Folder, contentDescription = null, tint = Color(0xFFFFC857))
-                                Text(folder.name, color = Color.White, maxLines = 1, style = MaterialTheme.typography.labelMedium)
-                                Text("${folder.packages.size} apps", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.labelSmall)
+                    folders.take(3).forEach { folder ->
+                        Surface(
+                            modifier = Modifier.weight(1f).height(54.dp).clickable {
+                                selectedFolder = folder
+                                folderDialog = true
+                            },
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color.White.copy(alpha = 0.07f)
+                        ) {
+                            Row(modifier = Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Folder, contentDescription = null, tint = Color.White.copy(alpha = 0.72f), modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text(folder.name, color = Color.White, maxLines = 1, style = MaterialTheme.typography.labelMedium)
+                                    Text("${folder.packages.size}", color = Color.White.copy(alpha = 0.45f), style = MaterialTheme.typography.labelSmall)
+                                }
                             }
                         }
                     }
-                    if (folders.size < 4) Surface(modifier = Modifier.weight(1f).clickable { folderDialog = true }, shape = RoundedCornerShape(18.dp), color = Color.White.copy(alpha = 0.05f)) {
-                        Column(modifier = Modifier.padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Add, contentDescription = "Nova pasta", tint = Color.White.copy(alpha = 0.7f)); Text("Nova pasta", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.labelMedium) }
+                    if (folders.size < 3) {
+                        Surface(
+                            modifier = Modifier.weight(1f).height(54.dp).clickable { folderDialog = true },
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color.White.copy(alpha = 0.05f)
+                        ) {
+                            Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Add, contentDescription = "Nova pasta", tint = Color.White.copy(alpha = 0.62f), modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Nova pasta", color = Color.White.copy(alpha = 0.62f), style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
                     }
                 }
-                Spacer(Modifier.height(18.dp))
             }
 
-            Text(
-                "Favoritos",
-                modifier = Modifier.fillMaxWidth().padding(start = 4.dp),
-                color = Color.White,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(if (compactMode) 22.dp else 30.dp))
+            Text("Favoritos", color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.labelLarge)
+            Spacer(Modifier.height(8.dp))
 
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(26.dp),
-                color = Color.White.copy(alpha = 0.085f)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    repeat(5) { index ->
-                        val app = favoriteApps.getOrNull(index)
-                        if (app != null) {
-                            FavoriteDockItem(app, iconSize) { openApp(context, app.packageName) }
-                        } else {
-                            AddFavoriteItem { drawerOpen = true }
-                        }
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                repeat(5) { index ->
+                    val app = favoriteApps.getOrNull(index)
+                    if (app != null) {
+                        MinimalFavoriteItem(app = app, iconSize = iconSize) { openApp(context, app.packageName) }
+                    } else {
+                        MinimalAddFavoriteItem { drawerOpen = true }
                     }
                 }
             }
 
             Spacer(Modifier.weight(1f))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            FilledTonalButton(
+                onClick = { drawerOpen = true },
+                modifier = Modifier.align(Alignment.CenterHorizontally).height(48.dp),
+                shape = RoundedCornerShape(24.dp),
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = Color.White.copy(alpha = 0.09f),
+                    contentColor = Color.White
+                )
             ) {
-                FilledTonalButton(
-                    onClick = { drawerOpen = true },
-                    modifier = Modifier.weight(1f).height(54.dp),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = Color.White.copy(alpha = 0.14f),
-                        contentColor = Color.White
-                    )
-                ) {
-                    Icon(Icons.Default.Apps, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Aplicativos", fontWeight = FontWeight.SemiBold)
-                }
-                FilledTonalButton(
-                    onClick = { folderDialog = true },
-                    modifier = Modifier.weight(1f).height(54.dp),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = Color.White.copy(alpha = 0.14f),
-                        contentColor = Color.White
-                    )
-                ) {
-                    Icon(Icons.Default.Folder, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Nova pasta", fontWeight = FontWeight.SemiBold)
-                }
+                Icon(Icons.Default.Apps, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Todos os aplicativos")
             }
+
             Spacer(Modifier.height(8.dp))
-            Text("Deslize para cima para abrir a gaveta", color = Color.White.copy(alpha = 0.48f),
-                style = MaterialTheme.typography.labelSmall)
+            Text("Deslize para cima", modifier = Modifier.align(Alignment.CenterHorizontally), color = Color.White.copy(alpha = 0.35f), style = MaterialTheme.typography.labelSmall)
         }
+    }
+}
+
+@Composable
+private fun MinimalFavoriteItem(app: AppInfo, iconSize: Float, onClick: () -> Unit) {
+    val iconBitmap = remember(app.packageName) { app.icon.toBitmap(96, 96).asImageBitmap() }
+    Row(
+        modifier = Modifier.fillMaxWidth().height(58.dp).clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Image(bitmap = iconBitmap, contentDescription = app.label, modifier = Modifier.size(iconSize.coerceIn(40f, 56f).dp).clip(RoundedCornerShape(14.dp)))
+        Spacer(Modifier.width(14.dp))
+        Text(app.label, color = Color.White.copy(alpha = 0.92f), style = MaterialTheme.typography.titleMedium, maxLines = 1)
+    }
+}
+
+@Composable
+private fun MinimalAddFavoriteItem(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().height(44.dp).clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Default.Add, contentDescription = "Adicionar favorito", tint = Color.White.copy(alpha = 0.35f), modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(12.dp))
+        Text("Adicionar favorito", color = Color.White.copy(alpha = 0.35f), style = MaterialTheme.typography.bodyMedium)
     }
 }
 
