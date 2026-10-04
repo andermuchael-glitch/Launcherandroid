@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -18,6 +19,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -56,9 +58,6 @@ fun LauncherScreen() {
 
     val filteredApps = apps.filter { query.isBlank() || it.label.contains(query, ignoreCase = true) }
     val favoriteApps = favorites.mapNotNull { pkg -> apps.find { it.packageName == pkg } }
-    val quickApps = (favoriteApps + apps.filterNot { it.packageName in favorites })
-        .distinctBy { it.packageName }
-        .take(5)
 
     if (drawerOpen) {
         AppDrawer(
@@ -83,49 +82,79 @@ fun LauncherScreen() {
             .padding(horizontal = 20.dp, vertical = 28.dp)
     ) {
         Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                Surface(shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.10f)) {
-                    Text("Launcher", modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
-                        color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.labelMedium)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Launcher", color = Color.White.copy(alpha = 0.82f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                IconButton(onClick = { context.startActivity(Intent(android.provider.Settings.ACTION_SETTINGS)) }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "Configurações", tint = Color.White.copy(alpha = 0.8f))
                 }
             }
             Spacer(Modifier.height(24.dp))
             ClockAndDate()
             Spacer(Modifier.height(26.dp))
             SearchField(value = query, onSearch = { drawerOpen = true })
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(30.dp))
 
-            if (quickApps.isNotEmpty()) {
+            Text(
+                "Favoritos",
+                modifier = Modifier.fillMaxWidth().padding(start = 4.dp),
+                color = Color.White,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(10.dp))
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(26.dp),
+                color = Color.White.copy(alpha = 0.085f)
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(start = 4.dp, bottom = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Column {
-                        Text("Aplicativos", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Text(apps.size.toString() + " disponíveis", color = Color.White.copy(alpha = 0.48f), style = MaterialTheme.typography.labelSmall)
-                    }
-                    Text("Toque para abrir", color = Color.White.copy(alpha = 0.45f), style = MaterialTheme.typography.labelSmall)
-                }
-                Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp),
-                    color = Color.White.copy(alpha = 0.09f)) {
-                    Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 16.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly) {
-                        quickApps.forEach { app -> QuickAppItem(app) { openApp(context, app.packageName) } }
+                    repeat(5) { index ->
+                        val app = favoriteApps.getOrNull(index)
+                        if (app != null) {
+                            FavoriteDockItem(app) { openApp(context, app.packageName) }
+                        } else {
+                            AddFavoriteItem { drawerOpen = true }
+                        }
                     }
                 }
-                Spacer(Modifier.height(18.dp))
             }
 
-            FilledTonalButton(
-                onClick = { drawerOpen = true },
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-                shape = RoundedCornerShape(18.dp),
-                colors = ButtonDefaults.filledTonalButtonColors(containerColor = Color.White.copy(alpha = 0.14f), contentColor = Color.White)
+            Spacer(Modifier.weight(1f))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Icon(Icons.Default.Apps, contentDescription = null)
-                Spacer(Modifier.width(10.dp))
-                Text("Todos os aplicativos", fontWeight = FontWeight.SemiBold)
+                FilledTonalButton(
+                    onClick = { drawerOpen = true },
+                    modifier = Modifier.weight(1f).height(54.dp),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = Color.White.copy(alpha = 0.14f),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Icon(Icons.Default.Apps, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Aplicativos", fontWeight = FontWeight.SemiBold)
+                }
+                FilledTonalButton(
+                    onClick = { context.startActivity(Intent(android.provider.Settings.ACTION_SETTINGS)) },
+                    modifier = Modifier.weight(1f).height(54.dp),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = Color.White.copy(alpha = 0.14f),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Icon(Icons.Default.MoreVert, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Configurações", fontWeight = FontWeight.SemiBold)
+                }
             }
             Spacer(Modifier.height(8.dp))
             Text("Deslize para cima para abrir a gaveta", color = Color.White.copy(alpha = 0.48f),
@@ -211,6 +240,53 @@ private fun QuickAppItem(app: AppInfo, onClick: () -> Unit) {
             color = Color.White.copy(alpha = 0.82f),
             maxLines = 1,
             textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(top = 5.dp)
+        )
+    }
+}
+
+@Composable
+private fun RowScope.FavoriteDockItem(app: AppInfo, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier.weight(1f).clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Image(
+            bitmap = app.icon.toBitmap(96, 96).asImageBitmap(),
+            contentDescription = app.label,
+            modifier = Modifier.size(48.dp).clip(RoundedCornerShape(14.dp))
+        )
+        Text(
+            app.label,
+            color = Color.White.copy(alpha = 0.86f),
+            maxLines = 1,
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(top = 5.dp)
+        )
+    }
+}
+
+@Composable
+private fun RowScope.AddFavoriteItem(onClick: () -> Unit) {
+    Column(
+        modifier = Modifier.weight(1f).clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Surface(
+            modifier = Modifier.size(48.dp),
+            shape = RoundedCornerShape(14.dp),
+            color = Color.White.copy(alpha = 0.08f)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text("+", color = Color.White.copy(alpha = 0.75f), fontSize = 26.sp, fontWeight = FontWeight.Light)
+            }
+        }
+        Text(
+            "Adicionar",
+            color = Color.White.copy(alpha = 0.58f),
+            maxLines = 1,
             style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(top = 5.dp)
         )
