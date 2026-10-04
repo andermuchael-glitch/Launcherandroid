@@ -9,6 +9,8 @@ import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import android.net.Uri
+import android.os.Build
+import android.app.role.RoleManager
 import android.util.Base64
 import androidx.compose.foundation.Image
 import coil.compose.AsyncImage
@@ -167,6 +169,7 @@ fun LauncherScreen() {
                 weatherCity = city.trim()
                 prefs.edit().putString("weather_city", weatherCity).apply()
             },
+            onSetDefaultLauncher = { requestDefaultLauncher(context) },
             onClose = { settingsOpen = false }
         )
         return
@@ -493,6 +496,7 @@ private fun LauncherSettings(
     onShowDate: (Boolean) -> Unit,
     onCompact: (Boolean) -> Unit,
     onWeatherCitySave: (String) -> Unit,
+    onSetDefaultLauncher: () -> Unit,
     onClose: () -> Unit
 ) {
     Column(
@@ -597,7 +601,7 @@ private fun LauncherSettings(
         Spacer(Modifier.height(24.dp))        Text("Sistema", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
         OutlinedButton(
-            onClick = { },
+            onClick = onSetDefaultLauncher,
             modifier = Modifier.fillMaxWidth().height(52.dp),
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
@@ -1095,6 +1099,14 @@ private fun saveQuickNotes(prefs: android.content.SharedPreferences, notes: List
     prefs.edit().putStringSet("quick_notes", notes.takeLast(5).toSet()).apply()
 }
 
+private fun requestDefaultLauncher(context: Context) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val roleManager = context.getSystemService(RoleManager::class.java)
+        if (roleManager?.isRoleAvailable(RoleManager.ROLE_HOME) == true && !roleManager.isRoleHeld(RoleManager.ROLE_HOME)) {
+            context.startActivity(roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME))
+        }
+    }
+}
 private fun openApp(context: Context, packageName: String) {
     context.packageManager.getLaunchIntentForPackage(packageName)?.let {
         it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
