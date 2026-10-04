@@ -5,7 +5,6 @@ import android.content.Intent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -20,6 +19,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -49,6 +49,9 @@ fun LauncherScreen() {
     var query by remember { mutableStateOf("") }
     var drawerOpen by remember { mutableStateOf(false) }
     var favorites by remember { mutableStateOf(listOf<String>()) }
+    var settingsOpen by remember { mutableStateOf(false) }
+    var showDate by remember { mutableStateOf(context.getSharedPreferences("launcher", 0).getBoolean("show_date", true)) }
+    var compactMode by remember { mutableStateOf(context.getSharedPreferences("launcher", 0).getBoolean("compact", false)) }
 
     LaunchedEffect(Unit) {
         apps = repository.getLaunchableApps()
@@ -58,6 +61,17 @@ fun LauncherScreen() {
 
     val filteredApps = apps.filter { query.isBlank() || it.label.contains(query, ignoreCase = true) }
     val favoriteApps = favorites.mapNotNull { pkg -> apps.find { it.packageName == pkg } }
+
+    if (settingsOpen) {
+        LauncherSettings(
+            showDate = showDate,
+            compactMode = compactMode,
+            onShowDate = { showDate = it; context.getSharedPreferences("launcher", 0).edit().putBoolean("show_date", it).apply() },
+            onCompact = { compactMode = it; context.getSharedPreferences("launcher", 0).edit().putBoolean("compact", it).apply() },
+            onClose = { settingsOpen = false }
+        )
+        return
+    }
 
     if (drawerOpen) {
         AppDrawer(
@@ -84,15 +98,15 @@ fun LauncherScreen() {
         Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("Launcher", color = Color.White.copy(alpha = 0.82f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                IconButton(onClick = { context.startActivity(Intent(android.provider.Settings.ACTION_SETTINGS)) }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Configurações", tint = Color.White.copy(alpha = 0.8f))
+                IconButton(onClick = { settingsOpen = true }) {
+                    Icon(Icons.Default.Settings, contentDescription = "Configurações do Launcher", tint = Color.White.copy(alpha = 0.8f))
                 }
             }
             Spacer(Modifier.height(24.dp))
-            ClockAndDate()
-            Spacer(Modifier.height(26.dp))
-            SearchField(value = query, onSearch = { drawerOpen = true })
-            Spacer(Modifier.height(30.dp))
+            ClockAndDate(showDate = showDate)
+            Spacer(Modifier.height(if (compactMode) 16.dp else 26.dp))
+            SearchField(value = query, onQueryChange = { query = it; drawerOpen = true })
+            Spacer(Modifier.height(if (compactMode) 20.dp else 30.dp))
 
             Text(
                 "Favoritos",
@@ -143,7 +157,7 @@ fun LauncherScreen() {
                     Text("Aplicativos", fontWeight = FontWeight.SemiBold)
                 }
                 FilledTonalButton(
-                    onClick = { context.startActivity(Intent(android.provider.Settings.ACTION_SETTINGS)) },
+                    onClick = { settingsOpen = true },
                     modifier = Modifier.weight(1f).height(54.dp),
                     shape = RoundedCornerShape(18.dp),
                     colors = ButtonDefaults.filledTonalButtonColors(
@@ -164,26 +178,103 @@ fun LauncherScreen() {
 }
 
 @Composable
-private fun ClockAndDate() {
+private fun ClockAndDate(showDate: Boolean) {
     var now by remember { mutableStateOf(Date()) }
     LaunchedEffect(Unit) { while (true) { now = Date(); kotlinx.coroutines.delay(1000) } }
     val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(now)
     val date = SimpleDateFormat("EEEE, dd 'de' MMMM", Locale("pt", "BR")).format(now)
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(time, color = Color.White, fontSize = 68.sp, fontWeight = FontWeight.Light, letterSpacing = (-2).sp)
-        Text(date.replaceFirstChar { it.uppercase() }, color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.titleMedium)
+        if (showDate) Text(date.replaceFirstChar { it.uppercase() }, color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.titleMedium)
     }
 }
 
 @Composable
-private fun SearchField(value: String, onSearch: () -> Unit) {
-    Surface(modifier = Modifier.fillMaxWidth().height(56.dp).clickable(onClick = onSearch),
-        shape = RoundedCornerShape(20.dp), color = Color.White.copy(alpha = 0.12f)) {
+private fun SearchField(value: String, onQueryChange: (String) -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().height(56.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = Color.White.copy(alpha = 0.12f)
+    ) {
         Row(modifier = Modifier.padding(horizontal = 17.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Search, contentDescription = "Buscar", tint = Color.White.copy(alpha = 0.75f))
             Spacer(Modifier.width(12.dp))
-            Text(if (value.isBlank()) "Buscar aplicativos" else value, color = Color.White.copy(alpha = 0.55f))
+            androidx.compose.foundation.text.BasicTextField(
+                value = value,
+                onValueChange = onQueryChange,
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+                textStyle = LocalTextStyle.current.copy(color = Color.White, fontSize = 16.sp),
+                decorationBox = { inner ->
+                    if (value.isBlank()) Text("Buscar aplicativos", color = Color.White.copy(alpha = 0.55f))
+                    inner()
+                }
+            )
         }
+    }
+}
+
+@Composable
+private fun LauncherSettings(
+    showDate: Boolean,
+    compactMode: Boolean,
+    onShowDate: (Boolean) -> Unit,
+    onCompact: (Boolean) -> Unit,
+    onClose: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().background(Color(0xFF0D1420)).padding(horizontal = 20.dp, vertical = 22.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onClose) {
+                Icon(Icons.Default.Close, contentDescription = "Voltar", tint = Color.White)
+            }
+            Text("Configurações do Launcher", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+        }
+        Spacer(Modifier.height(26.dp))
+        Text("Tela inicial", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
+        Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = Color.White.copy(alpha = 0.08f)) {
+            Column {
+                SettingSwitch("Mostrar data", "Exibir a data abaixo do relógio", showDate, onShowDate)
+                HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
+                SettingSwitch("Modo compacto", "Reduzir os espaços da tela inicial", compactMode, onCompact)
+            }
+        }
+        Spacer(Modifier.height(24.dp))
+        Text("Personalização", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
+        Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = Color.White.copy(alpha = 0.08f)) {
+            Column(modifier = Modifier.padding(18.dp)) {
+                Text("Papel de parede", color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text("A personalização do papel de parede entra na próxima etapa.", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+            }
+        }
+        Spacer(Modifier.height(24.dp))
+        Text("Sistema", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = { },
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+        ) { Text("Launcher padrão do Android") }
+        Spacer(Modifier.height(8.dp))
+        Text("Escolha o Launcherandroid como aplicativo de tela inicial padrão nas configurações do Android.", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable
+private fun SettingSwitch(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable { onCheckedChange(!checked) }.padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, color = Color.White, fontWeight = FontWeight.Medium)
+            Text(subtitle, color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
