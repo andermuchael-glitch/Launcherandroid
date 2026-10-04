@@ -318,7 +318,7 @@ private fun ClockAndDate(showDate: Boolean) {
     val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(now)
     val date = SimpleDateFormat("EEEE, dd 'de' MMMM", Locale("pt", "BR")).format(now)
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(time, color = Color.White, fontSize = 68.sp, fontWeight = FontWeight.Light, letterSpacing = (-2).sp)
+        Text(time, color = Color.White, fontSize = 60.sp, fontWeight = FontWeight.Light, letterSpacing = (-2).sp)
         if (showDate) Text(date.replaceFirstChar { it.uppercase() }, color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.titleMedium)
     }
 }
