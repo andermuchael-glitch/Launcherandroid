@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -527,6 +528,7 @@ private fun RowScope.FavoriteItem(app: AppInfo, onClick: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AppIcon(app: AppInfo, onClick: () -> Unit, onLongPress: () -> Unit) {
     Image(bitmap = app.icon.toBitmap(112, 112).asImageBitmap(), contentDescription = app.label,
@@ -589,7 +591,7 @@ private fun FolderEditorDialog(
                 }
             }
         },
-        confirmButton = { Button(onClick = { if (name.isNotBlank()) onSave(LauncherFolder(initial?.id ?: System.currentTimeMillis().toString(), name.trim(), selected.toList()))) }) { Text("Salvar") } },
+        confirmButton = { Button(onClick = {\n            if (name.isNotBlank()) {\n                val id = initial?.id ?: System.currentTimeMillis().toString()\n                onSave(LauncherFolder(id, name.trim(), selected.toList()))\n            }\n        }) { Text("Salvar") } },
         dismissButton = { Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { if (initial != null) TextButton(onClick = { onDelete(initial) }) { Text("Excluir") }; TextButton(onClick = onDismiss) { Text("Cancelar") } } }
     )
 }
