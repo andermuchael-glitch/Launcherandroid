@@ -551,7 +551,7 @@ private fun AppDrawer(
                     textStyle = LocalTextStyle.current.copy(color = Color.White, fontSize = 16.sp),
                     decorationBox = { inner ->
                         if (query.isBlank()) {
-                            Text("Buscar", color = Color.White.copy(alpha = 0.42f))
+                            Text("Buscar aplicativos", color = Color.White.copy(alpha = 0.42f))
                         }
                         inner()
                     }
@@ -627,8 +627,7 @@ private fun AppDrawer(
                                 onVerticalDrag = { change, _ ->
                                     val y = change.position.y.coerceIn(0f, size.height.toFloat())
                                     val fraction = if (size.height > 0) y / size.height else 0f
-                                    val letterIndex = (fraction * alphabet.size).toInt()
-                                        .coerceIn(0, alphabet.lastIndex)
+                                    val letterIndex = (fraction * alphabet.size).toInt().coerceIn(0, alphabet.lastIndex)
                                     val letter = alphabet[letterIndex]
                                     val target = letterPositions[letter]
                                         ?: letterPositions.entries.minByOrNull {
@@ -640,6 +639,11 @@ private fun AppDrawer(
                                     change.consume()
                                 }
                             )
+                        }
+                        .clickable {
+                            // O toque central no índice leva à primeira letra disponível.
+                            val target = letterPositions[alphabet.firstOrNull()] ?: 0
+                            scope.launch { listState.scrollToItem(target) }
                         },
                     contentAlignment = Alignment.Center
                 ) {
