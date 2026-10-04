@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Sort
@@ -185,15 +186,18 @@ fun LauncherScreen() {
                     if (dragAmount < -24f) drawerOpen = true
                 }
             }
-            .padding(horizontal = 24.dp, vertical = 24.dp)
     ) {
         val currentWallpaper = wallpaperBitmap
         if (currentWallpaper != null) {
             Image(bitmap = currentWallpaper, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.48f)))
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.38f)))
         }
 
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 8.dp)
+        ) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 IconButton(onClick = { settingsOpen = true }) {
                     Icon(Icons.Default.Settings, contentDescription = "Configurações", tint = Color.White.copy(alpha = 0.68f))
@@ -203,10 +207,10 @@ fun LauncherScreen() {
             Spacer(Modifier.height(8.dp))
             ClockAndDate(showDate = showDate)
             if (weatherCity.isNotBlank()) {
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(10.dp))
                 WeatherCard(weather = weather, configuredCity = weatherCity)
             }
-            Spacer(Modifier.height(if (compactMode) 18.dp else 28.dp))
+            Spacer(Modifier.height(if (compactMode) 12.dp else 18.dp))
             SearchField(value = query, onQueryChange = { query = it; drawerOpen = true })
 
             if (folders.isNotEmpty()) {
@@ -290,12 +294,12 @@ fun LauncherScreen() {
 private fun MinimalFavoriteItem(app: AppInfo, iconSize: Float, onClick: () -> Unit) {
     val iconBitmap = remember(app.packageName) { app.icon.toBitmap(96, 96).asImageBitmap() }
     Row(
-        modifier = Modifier.fillMaxWidth().height(58.dp).clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(horizontal = 8.dp),
+        modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(15.dp)).clickable(onClick = onClick).padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Image(bitmap = iconBitmap, contentDescription = app.label, modifier = Modifier.size(iconSize.coerceIn(40f, 56f).dp).clip(RoundedCornerShape(14.dp)))
-        Spacer(Modifier.width(14.dp))
-        Text(app.label, color = Color.White.copy(alpha = 0.92f), style = MaterialTheme.typography.titleMedium, maxLines = 1)
+        Image(bitmap = iconBitmap, contentDescription = app.label, modifier = Modifier.size(iconSize.coerceIn(38f, 48f).dp).clip(RoundedCornerShape(14.dp)))
+        Spacer(Modifier.width(11.dp))
+        Text(app.label, color = Color.White.copy(alpha = 0.92f), style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp), maxLines = 1)
     }
 }
 
@@ -363,9 +367,9 @@ private fun WeatherCard(weather: WeatherData?, configuredCity: String) {
 @Composable
 private fun SearchField(value: String, onQueryChange: (String) -> Unit) {
     Surface(
-        modifier = Modifier.fillMaxWidth().height(56.dp),
-        shape = RoundedCornerShape(20.dp),
-        color = Color.White.copy(alpha = 0.12f)
+        modifier = Modifier.fillMaxWidth().height(50.dp),
+        shape = RoundedCornerShape(17.dp),
+        color = Color.White.copy(alpha = 0.10f)
     ) {
         Row(modifier = Modifier.padding(horizontal = 17.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Search, contentDescription = "Buscar", tint = Color.White.copy(alpha = 0.75f))
@@ -896,7 +900,7 @@ private fun RowScope.FavoriteItem(app: AppInfo, onClick: () -> Unit) {
 private fun AppIcon(app: AppInfo, onClick: () -> Unit, onLongPress: () -> Unit) {
     val iconBitmap = remember(app.packageName) { app.icon.toBitmap(112, 112).asImageBitmap() }
     Image(bitmap = iconBitmap, contentDescription = app.label,
-        modifier = Modifier.size(62.dp).clip(RoundedCornerShape(17.dp)).combinedClickable(onClick = onClick, onLongClick = onLongPress))
+        modifier = Modifier.size(52.dp).clip(RoundedCornerShape(15.dp)).combinedClickable(onClick = onClick, onLongClick = onLongPress))
 }
 
 data class LauncherFolder(val id: String, val name: String, val packages: List<String>)
