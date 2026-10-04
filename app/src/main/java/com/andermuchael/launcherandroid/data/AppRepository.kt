@@ -6,7 +6,16 @@ import com.andermuchael.launcherandroid.model.AppInfo
 
 class AppRepository(private val context: Context) {
 
+    companion object {
+        @Volatile private var cachedApps: List<AppInfo>? = null
+
+        fun invalidateCache() {
+            cachedApps = null
+        }
+    }
+
     fun getLaunchableApps(): List<AppInfo> {
+        cachedApps?.let { return it }
         val pm = context.packageManager
         val intent = Intent(Intent.ACTION_MAIN).apply {
             addCategory(Intent.CATEGORY_LAUNCHER)
@@ -24,5 +33,6 @@ class AppRepository(private val context: Context) {
             .distinctBy { it.packageName }
             .sortedBy { it.label.lowercase() }
             .toList()
+            .also { cachedApps = it }
     }
 }
