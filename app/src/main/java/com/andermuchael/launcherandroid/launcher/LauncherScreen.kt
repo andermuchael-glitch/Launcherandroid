@@ -585,22 +585,16 @@ private fun LauncherSettings(
             }
         }
         Spacer(Modifier.height(16.dp))
-        Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = Color.White.copy(alpha = 0.08f)) {
+        Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = Color.White.copy(alpha = 0.07f)) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Tema", color = Color.White, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("azul" to "Azul", "preto" to "Preto", "claro" to "Claro").forEach { (key, label) ->
-                        FilterChip(selected = theme == key, onClick = { onTheme(key) }, label = { Text(label) })
-                    }
-                }
-                Spacer(Modifier.height(14.dp))
-                Text("Tamanho dos ícones: " + iconSize.toInt() + " dp", color = Color.White.copy(alpha = 0.8f))
-                Slider(value = iconSize, onValueChange = onIconSize, valueRange = 40f..64f, steps = 5)
+                Text("Tamanho dos elementos", color = Color.White, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                Text("Ajuste o tamanho sem aplicar temas.", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(8.dp))
+                Slider(value = iconSize, onValueChange = onIconSize, valueRange = 36f..52f, steps = 7)
             }
         }
-        Spacer(Modifier.height(24.dp))
-        Text("Sistema", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(24.dp))        Text("Sistema", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
         OutlinedButton(
             onClick = { },
