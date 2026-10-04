@@ -92,6 +92,8 @@ fun LauncherScreen() {
     var selectedFolder by remember { mutableStateOf<LauncherFolder?>(null) }
     var longPressApp by remember { mutableStateOf<AppInfo?>(null) }
     var addToFolderApp by remember { mutableStateOf<AppInfo?>(null) }
+    var quickNotes by remember { mutableStateOf(loadQuickNotes(prefs)) }
+    var noteDraft by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         apps = withContext(Dispatchers.IO) { repository.getLaunchableApps() }
@@ -213,8 +215,27 @@ fun LauncherScreen() {
             Spacer(Modifier.height(if (compactMode) 12.dp else 18.dp))
             SearchField(value = query, onQueryChange = { query = it; drawerOpen = true })
 
+            Spacer(Modifier.height(10.dp))
+            QuickNotesWidget(
+                notes = quickNotes,
+                draft = noteDraft,
+                onDraftChange = { noteDraft = it },
+                onAdd = {
+                    val text = noteDraft.trim()
+                    if (text.isNotEmpty()) {
+                        quickNotes = (quickNotes + text).takeLast(5)
+                        saveQuickNotes(prefs, quickNotes)
+                        noteDraft = ""
+                    }
+                },
+                onDelete = { note ->
+                    quickNotes = quickNotes.filterNot { it == note }
+                    saveQuickNotes(prefs, quickNotes)
+                }
+            )
+
             if (folders.isNotEmpty()) {
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(12.dp))
                 Text("Pastas", color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.labelLarge)
                 Spacer(Modifier.height(8.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -253,11 +274,11 @@ fun LauncherScreen() {
                 }
             }
 
-            Spacer(Modifier.height(if (compactMode) 22.dp else 30.dp))
+            Spacer(Modifier.height(if (compactMode) 12.dp else 18.dp))
             Text("Favoritos", color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.labelLarge)
             Spacer(Modifier.height(8.dp))
 
-            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 repeat(5) { index ->
                     val app = favoriteApps.getOrNull(index)
                     if (app != null) {
@@ -357,6 +378,59 @@ private fun WeatherCard(weather: WeatherData?, configuredCity: String) {
                                 Text(day.max.roundToInt().toString() + "° " + day.min.roundToInt().toString() + "°", color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.labelSmall)
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun QuickNotesWidget(
+    notes: List<String>,
+    draft: String,
+    onDraftChange: (String) -> Unit,
+    onAdd: () -> Unit,
+    onDelete: (String) -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(17.dp),
+        color = Color.White.copy(alpha = 0.075f)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.EditNote, contentDescription = null, tint = Color.White.copy(alpha = 0.72f), modifier = Modifier.size(19.dp))
+                Spacer(Modifier.width(7.dp))
+                Text("Notas rápidas", color = Color.White.copy(alpha = 0.82f), style = MaterialTheme.typography.labelLarge)
+                Spacer(Modifier.weight(1f))
+                Text("máx. 5", color = Color.White.copy(alpha = 0.35f), style = MaterialTheme.typography.labelSmall)
+            }
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.foundation.text.BasicTextField(
+                    value = draft,
+                    onValueChange = onDraftChange,
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                    textStyle = LocalTextStyle.current.copy(color = Color.White, fontSize = 14.sp),
+                    decorationBox = { inner ->
+                        if (draft.isBlank()) {
+                            Text("Digite uma anotação rápida…", color = Color.White.copy(alpha = 0.38f), style = MaterialTheme.typography.bodySmall)
+                        }
+                        inner()
+                    }
+                )
+                TextButton(onClick = onAdd, enabled = draft.isNotBlank(), contentPadding = PaddingValues(horizontal = 7.dp, vertical = 0.dp)) {
+                    Text("Adicionar", fontSize = 12.sp)
+                }
+            }
+            notes.takeLast(2).forEach { note ->
+                Row(modifier = Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("•", color = Color.White.copy(alpha = 0.42f), modifier = Modifier.padding(end = 6.dp))
+                    Text(note, color = Color.White.copy(alpha = 0.68f), style = MaterialTheme.typography.labelSmall, maxLines = 1, modifier = Modifier.weight(1f))
+                    IconButton(onClick = { onDelete(note) }, modifier = Modifier.size(26.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Excluir anotação", tint = Color.White.copy(alpha = 0.32f), modifier = Modifier.size(14.dp))
                     }
                 }
             }
@@ -1043,7 +1117,15 @@ private fun downloadAndApplyWallpaper(context: Context, option: WallpaperOption,
     }
 }
 
-private fun openApp(context: Context, packageName: String) {
+private fun loadQuickNotes(prefs: android.content.SharedPreferences): List<String> {
+    return prefs.getStringSet("quick_notes", emptySet()).orEmpty().toList().takeLast(5)
+}
+
+private fun saveQuickNotes(prefs: android.content.SharedPreferences, notes: List<String>) {
+    prefs.edit().putStringSet("quick_notes", notes.takeLast(5).toSet()).apply()
+}
+
+private fun openApp(context: Context, packageName: String)
     context.packageManager.getLaunchIntentForPackage(packageName)?.let { it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); context.startActivity(it) }
 }
 
