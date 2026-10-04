@@ -13,12 +13,20 @@ data class WeatherDay(
     val rainProbability: Int
 )
 
+data class WeatherHour(
+    val time: String,
+    val temperature: Double,
+    val code: Int,
+    val rainProbability: Int
+)
+
 data class WeatherData(
     val city: String,
     val temperature: Double,
     val apparent: Double,
     val code: Int,
-    val days: List<WeatherDay>
+    val days: List<WeatherDay>,
+    val hours: List<WeatherHour>
 )
 
 suspend fun fetchWeather(city: String): WeatherData? {
@@ -41,17 +49,37 @@ suspend fun fetchWeather(city: String): WeatherData? {
             "https://api.open-meteo.com/v1/forecast" +
                 "?latitude=$latitude&longitude=$longitude" +
                 "&current=temperature_2m,apparent_temperature,weather_code" +
+                "&hourly=temperature_2m,weather_code,precipitation_probability" +
                 "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max" +
                 "&timezone=auto&forecast_days=5"
         )
         val forecast = httpGet(forecastUrl) ?: return null
         val current = forecast.optJSONObject("current") ?: return null
+        val hourly = forecast.optJSONObject("hourly") ?: return null
+        val hourlyTimes = hourly.optJSONArray("time") ?: return null
+        val hourlyTemps = hourly.optJSONArray("temperature_2m") ?: return null
+        val hourlyCodes = hourly.optJSONArray("weather_code") ?: return null
+        val hourlyRain = hourly.optJSONArray("precipitation_probability") ?: return null
         val daily = forecast.optJSONObject("daily") ?: return null
         val dates = daily.optJSONArray("time") ?: return null
         val max = daily.optJSONArray("temperature_2m_max") ?: return null
         val min = daily.optJSONArray("temperature_2m_min") ?: return null
         val codes = daily.optJSONArray("weather_code") ?: return null
         val rain = daily.optJSONArray("precipitation_probability_max") ?: return null
+
+        val hours = buildList {
+            val startHour = hourlyTimes.indexOfFirst { hourlyTimes.optString(it) >= forecast.optString("current", "").takeIf { false } }
+            for (i in 0 until minOf(12, hourlyTimes.length())) {
+                add(
+                    WeatherHour(
+                        time = hourlyTimes.optString(i),
+                        temperature = hourlyTemps.optDouble(i),
+                        code = hourlyCodes.optInt(i),
+                        rainProbability = hourlyRain.optInt(i)
+                    )
+                )
+            }
+        }
 
         val days = buildList {
             for (i in 0 until minOf(5, dates.length())) {
@@ -71,7 +99,8 @@ suspend fun fetchWeather(city: String): WeatherData? {
             temperature = current.optDouble("temperature_2m"),
             apparent = current.optDouble("apparent_temperature"),
             code = current.optInt("weather_code"),
-            days = days
+            days = days,
+            hours = hours
         )
     }.getOrNull()
 }
