@@ -1103,9 +1103,8 @@ private fun requestDefaultLauncher(context: Context) {
     }
 }
 private fun openApp(context: Context, packageName: String) {
-    context.packageManager.getLaunchIntentForPackage(packageName)?.let {
-        it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(it)
+    context.packageManager.getLaunchIntentForPackage(packageName)?.let { intent ->
+        context.startActivity(intent)
     }
 }
 
