@@ -172,8 +172,9 @@ fun LauncherScreen() {
             }
             .padding(horizontal = 20.dp, vertical = 28.dp)
     ) {
-        if (wallpaperBitmap != null) {
-            Image(bitmap = wallpaperBitmap, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        val currentWallpaper = wallpaperBitmap
+        if (currentWallpaper != null) {
+            Image(bitmap = currentWallpaper, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.42f)))
         }
         Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -505,8 +506,9 @@ private fun QuickAppItem(app: AppInfo, onClick: () -> Unit) {
         modifier = Modifier.width(58.dp).clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        val iconBitmap = remember(app.packageName) { app.icon.toBitmap(96, 96).asImageBitmap() }
         Image(
-            bitmap = app.icon.toBitmap(96, 96).asImageBitmap(),
+            bitmap = iconBitmap,
             contentDescription = app.label,
             modifier = Modifier.size(48.dp).clip(RoundedCornerShape(14.dp))
         )
