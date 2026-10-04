@@ -2,7 +2,11 @@ package com.andermuchael.launcherandroid.launcher
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
+import android.net.Uri
 import androidx.compose.foundation.Image
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -28,6 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -51,7 +56,11 @@ fun LauncherScreen() {
     var favorites by remember { mutableStateOf(listOf<String>()) }
     var settingsOpen by remember { mutableStateOf(false) }
     var showDate by remember { mutableStateOf(context.getSharedPreferences("launcher", 0).getBoolean("show_date", true)) }
-    var compactMode by remember { mutableStateOf(context.getSharedPreferences("launcher", 0).getBoolean("compact", false)) }
+    val prefs = remember { context.getSharedPreferences("launcher", 0) }
+    var compactMode by remember { mutableStateOf(prefs.getBoolean("compact", false)) }
+    var theme by remember { mutableStateOf(prefs.getString("theme", "azul") ?: "azul") }
+    var iconSize by remember { mutableFloatStateOf(prefs.getFloat("icon_size", 48f)) }
+    var wallpaperUri by remember { mutableStateOf(prefs.getString("wallpaper_uri", null)) }
 
     LaunchedEffect(Unit) {
         apps = repository.getLaunchableApps()
@@ -62,10 +71,22 @@ fun LauncherScreen() {
     val filteredApps = apps.filter { query.isBlank() || it.label.contains(query, ignoreCase = true) }
     val favoriteApps = favorites.mapNotNull { pkg -> apps.find { it.packageName == pkg } }
 
+    val wallpaperBitmap = remember(wallpaperUri) { wallpaperUri?.let { runCatching { context.contentResolver.openInputStream(Uri.parse(it))?.use(BitmapFactory::decodeStream)?.asImageBitmap() }.getOrNull() } }
+    val wallpaperPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) { wallpaperUri = uri.toString(); prefs.edit().putString("wallpaper_uri", uri.toString()).apply() }
+    }
+
     if (settingsOpen) {
         LauncherSettings(
             showDate = showDate,
             compactMode = compactMode,
+            theme = theme,
+            iconSize = iconSize,
+            hasWallpaper = wallpaperBitmap != null,
+            onPickWallpaper = { wallpaperPicker.launch("image/*") },
+            onRemoveWallpaper = { wallpaperUri = null; prefs.edit().remove("wallpaper_uri").apply() },
+            onTheme = { theme = it; prefs.edit().putString("theme", it).apply() },
+            onIconSize = { iconSize = it; prefs.edit().putFloat("icon_size", it).apply() },
             onShowDate = { showDate = it; context.getSharedPreferences("launcher", 0).edit().putBoolean("show_date", it).apply() },
             onCompact = { compactMode = it; context.getSharedPreferences("launcher", 0).edit().putBoolean("compact", it).apply() },
             onClose = { settingsOpen = false }
@@ -89,12 +110,16 @@ fun LauncherScreen() {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Color(0xFF101827), Color(0xFF18283B), Color(0xFF0B111C))))
+            .background(launcherBackground(theme))
             .pointerInput(Unit) {
                 detectVerticalDragGestures { _, dragAmount -> if (dragAmount < -24f) drawerOpen = true }
             }
             .padding(horizontal = 20.dp, vertical = 28.dp)
     ) {
+        if (wallpaperBitmap != null) {
+            Image(bitmap = wallpaperBitmap, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.42f)))
+        }
         Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("Launcher", color = Color.White.copy(alpha = 0.82f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -129,7 +154,7 @@ fun LauncherScreen() {
                     repeat(5) { index ->
                         val app = favoriteApps.getOrNull(index)
                         if (app != null) {
-                            FavoriteDockItem(app) { openApp(context, app.packageName) }
+                            FavoriteDockItem(app, iconSize) { openApp(context, app.packageName) }
                         } else {
                             AddFavoriteItem { drawerOpen = true }
                         }
@@ -218,6 +243,13 @@ private fun SearchField(value: String, onQueryChange: (String) -> Unit) {
 private fun LauncherSettings(
     showDate: Boolean,
     compactMode: Boolean,
+    theme: String,
+    iconSize: Float,
+    hasWallpaper: Boolean,
+    onPickWallpaper: () -> Unit,
+    onRemoveWallpaper: () -> Unit,
+    onTheme: (String) -> Unit,
+    onIconSize: (Float) -> Unit,
     onShowDate: (Boolean) -> Unit,
     onCompact: (Boolean) -> Unit,
     onClose: () -> Unit
@@ -245,9 +277,29 @@ private fun LauncherSettings(
         Text("Personalização", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
         Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = Color.White.copy(alpha = 0.08f)) {
-            Column(modifier = Modifier.padding(18.dp)) {
+            Column(modifier = Modifier.padding(16.dp)) {
                 Text("Papel de parede", color = Color.White, fontWeight = FontWeight.SemiBold)
-                Text("A personalização do papel de parede entra na próxima etapa.", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+                Text(if (hasWallpaper) "Imagem personalizada ativa" else "Use uma imagem do seu celular", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onPickWallpaper, shape = RoundedCornerShape(14.dp), modifier = Modifier.weight(1f)) { Text("Escolher imagem") }
+                    if (hasWallpaper) OutlinedButton(onClick = onRemoveWallpaper, shape = RoundedCornerShape(14.dp)) { Text("Remover") }
+                }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = Color.White.copy(alpha = 0.08f)) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Tema", color = Color.White, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("azul" to "Azul", "preto" to "Preto", "claro" to "Claro").forEach { (key, label) ->
+                        FilterChip(selected = theme == key, onClick = { onTheme(key) }, label = { Text(label) })
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                Text("Tamanho dos ícones: " + iconSize.toInt() + " dp", color = Color.White.copy(alpha = 0.8f))
+                Slider(value = iconSize, onValueChange = onIconSize, valueRange = 40f..64f, steps = 5)
             }
         }
         Spacer(Modifier.height(24.dp))
@@ -261,6 +313,14 @@ private fun LauncherSettings(
         ) { Text("Launcher padrão do Android") }
         Spacer(Modifier.height(8.dp))
         Text("Escolha o Launcherandroid como aplicativo de tela inicial padrão nas configurações do Android.", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+private fun launcherBackground(theme: String): Brush {
+    return when (theme) {
+        "preto" -> Brush.verticalGradient(listOf(Color(0xFF050505), Color(0xFF111111), Color(0xFF000000)))
+        "claro" -> Brush.verticalGradient(listOf(Color(0xFFE8EEF5), Color(0xFFD3DDE8), Color(0xFFBFCBDA)))
+        else -> Brush.verticalGradient(listOf(Color(0xFF101827), Color(0xFF18283B), Color(0xFF0B111C)))
     }
 }
 
@@ -338,7 +398,7 @@ private fun QuickAppItem(app: AppInfo, onClick: () -> Unit) {
 }
 
 @Composable
-private fun RowScope.FavoriteDockItem(app: AppInfo, onClick: () -> Unit) {
+private fun RowScope.FavoriteDockItem(app: AppInfo, iconSize: Float, onClick: () -> Unit) {
     Column(
         modifier = Modifier.weight(1f).clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally
