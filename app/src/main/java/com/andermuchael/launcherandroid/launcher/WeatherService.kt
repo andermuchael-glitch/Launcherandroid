@@ -82,8 +82,12 @@ fun fetchWeather(city: String): WeatherData? {
         val codes = daily.optJSONArray("weather_code") ?: return null
         val rain = daily.optJSONArray("precipitation_probability_max") ?: return null
 
+        val currentTime = current.optString("time")
+        val firstHourIndex = hourlyTimes.let { times ->
+            (0 until times.length()).firstOrNull { times.optString(it) >= currentTime } ?: 0
+        }
         val hours = buildList {
-            for (i in 0 until minOf(12, hourlyTimes.length())) {
+            for (i in firstHourIndex until minOf(firstHourIndex + 12, hourlyTimes.length())) {
                 add(
                     WeatherHour(
                         time = hourlyTimes.optString(i),
