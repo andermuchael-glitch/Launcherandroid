@@ -491,7 +491,6 @@ private fun LauncherSettings(
     onPickWallpaper: () -> Unit,
     onSelectOnlineWallpaper: (WallpaperOption) -> Unit,
     onRemoveWallpaper: () -> Unit,
-    onTheme: (String) -> Unit,
     onIconSize: (Float) -> Unit,
     onShowDate: (Boolean) -> Unit,
     onCompact: (Boolean) -> Unit,
