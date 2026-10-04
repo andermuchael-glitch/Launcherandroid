@@ -591,7 +591,7 @@ private fun FolderEditorDialog(
                 }
             }
         },
-        confirmButton = { Button(onClick = {\n            if (name.isNotBlank()) {\n                val id = initial?.id ?: System.currentTimeMillis().toString()\n                onSave(LauncherFolder(id, name.trim(), selected.toList()))\n            }\n        }) { Text("Salvar") } },
+        confirmButton = { Button(onClick = { if (name.isNotBlank()) { val id = initial?.id ?: System.currentTimeMillis().toString(); onSave(LauncherFolder(id, name.trim(), selected.toList())) } }) { Text("Salvar") } },
         dismissButton = { Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { if (initial != null) TextButton(onClick = { onDelete(initial) }) { Text("Excluir") }; TextButton(onClick = onDismiss) { Text("Cancelar") } } }
     )
 }
