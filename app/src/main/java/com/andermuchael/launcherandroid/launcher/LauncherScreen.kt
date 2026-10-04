@@ -56,6 +56,9 @@ fun LauncherScreen() {
 
     val filteredApps = apps.filter { query.isBlank() || it.label.contains(query, ignoreCase = true) }
     val favoriteApps = favorites.mapNotNull { pkg -> apps.find { it.packageName == pkg } }
+    val quickApps = (favoriteApps + apps.filterNot { it.packageName in favorites })
+        .distinctBy { it.packageName }
+        .take(5)
 
     if (drawerOpen) {
         AppDrawer(
@@ -92,14 +95,23 @@ fun LauncherScreen() {
             SearchField(value = query, onSearch = { drawerOpen = true })
             Spacer(Modifier.weight(1f))
 
-            if (favoriteApps.isNotEmpty()) {
-                Text("Favoritos", modifier = Modifier.fillMaxWidth().padding(start = 4.dp, bottom = 12.dp),
-                    color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            if (quickApps.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 4.dp, bottom = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text("Aplicativos", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(apps.size.toString() + " disponíveis", color = Color.White.copy(alpha = 0.48f), style = MaterialTheme.typography.labelSmall)
+                    }
+                    Text("Toque para abrir", color = Color.White.copy(alpha = 0.45f), style = MaterialTheme.typography.labelSmall)
+                }
                 Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp),
                     color = Color.White.copy(alpha = 0.09f)) {
-                    Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        favoriteApps.take(5).forEach { app -> FavoriteItem(app) { openApp(context, app.packageName) } }
+                    Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly) {
+                        quickApps.forEach { app -> QuickAppItem(app) { openApp(context, app.packageName) } }
                     }
                 }
                 Spacer(Modifier.height(18.dp))
@@ -180,6 +192,28 @@ private fun AppDrawer(
                 AppItem(app, app.packageName in favorites, { onOpen(app) }, { onToggleFavorite(app) })
             }
         }
+    }
+}
+
+@Composable
+private fun QuickAppItem(app: AppInfo, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier.width(58.dp).clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Image(
+            bitmap = app.icon.toBitmap(96, 96).asImageBitmap(),
+            contentDescription = app.label,
+            modifier = Modifier.size(48.dp).clip(RoundedCornerShape(14.dp))
+        )
+        Text(
+            app.label,
+            color = Color.White.copy(alpha = 0.82f),
+            maxLines = 1,
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(top = 5.dp)
+        )
     }
 }
 
