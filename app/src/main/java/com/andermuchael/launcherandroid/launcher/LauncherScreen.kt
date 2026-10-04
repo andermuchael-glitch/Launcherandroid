@@ -19,6 +19,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -623,9 +625,10 @@ private fun AppDrawer(
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(14.dp))
                         .pointerInput(letterPositions, rows) {
-                            detectVerticalDragGestures(
-                                onVerticalDrag = { change, _ ->
-                                    val y = change.position.y.coerceIn(0f, size.height.toFloat())
+                            awaitEachGesture {
+                                val down = awaitFirstDown(requireUnconsumed = false)
+                                fun jump(positionY: Float) {
+                                    val y = positionY.coerceIn(0f, size.height.toFloat())
                                     val fraction = if (size.height > 0) y / size.height else 0f
                                     val letterIndex = (fraction * alphabet.size).toInt().coerceIn(0, alphabet.lastIndex)
                                     val letter = alphabet[letterIndex]
@@ -633,17 +636,18 @@ private fun AppDrawer(
                                         ?: letterPositions.entries.minByOrNull {
                                             kotlin.math.abs(it.key.first().code - letter.first().code)
                                         }?.value
-                                    if (target != null) {
-                                        scope.launch { listState.scrollToItem(target) }
-                                    }
+                                    if (target != null) scope.launch { listState.scrollToItem(target) }
+                                }
+                                jump(down.position.y)
+                                down.consume()
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val change = event.changes.firstOrNull() ?: break
+                                    if (!change.pressed) break
+                                    jump(change.position.y)
                                     change.consume()
                                 }
-                            )
-                        }
-                        .clickable {
-                            // O toque central no índice leva à primeira letra disponível.
-                            val target = letterPositions[alphabet.firstOrNull()] ?: 0
-                            scope.launch { listState.scrollToItem(target) }
+                            }
                         },
                     contentAlignment = Alignment.Center
                 ) {
