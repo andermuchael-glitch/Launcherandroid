@@ -720,6 +720,28 @@ private fun openAppInfo(context: Context, packageName: String) {
 private fun uninstallApp(context: Context, packageName: String) {
     context.startActivity(Intent(Intent.ACTION_DELETE).apply { data = Uri.parse("package:$packageName") })
 }
+private fun downloadAndApplyWallpaper(context: Context, option: WallpaperOption, onFinished: (Uri?, String?) -> Unit) {
+    kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val connection = (URL(option.url).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 10000
+                readTimeout = 20000
+                requestMethod = "GET"
+                connect()
+            }
+            if (connection.responseCode !in 200..299) throw IllegalStateException()
+            val dir = File(context.filesDir, "wallpapers").apply { mkdirs() }
+            val file = File(dir, option.name.replace("[^A-Za-z0-9]".toRegex(), "_") + ".jpg")
+            connection.inputStream.use { input -> FileOutputStream(file).use { output -> input.copyTo(output) } }
+            connection.disconnect()
+            WallpaperManager.getInstance(context).setStream(file.inputStream())
+            withContext(Dispatchers.Main) { onFinished(Uri.fromFile(file), option.name + " aplicado.") }
+        } catch (_: Exception) {
+            withContext(Dispatchers.Main) { onFinished(null, "Não foi possível aplicar o papel de parede agora.") }
+        }
+    }
+}
+
 private fun openApp(context: Context, packageName: String) {
     context.packageManager.getLaunchIntentForPackage(packageName)?.let { it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); context.startActivity(it) }
 }
