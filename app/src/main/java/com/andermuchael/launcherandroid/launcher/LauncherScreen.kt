@@ -472,48 +472,245 @@ private fun AppDrawer(
     apps: List<AppInfo>, query: String, onQueryChange: (String) -> Unit, favorites: Set<String>,
     onToggleFavorite: (AppInfo) -> Unit, onOpen: (AppInfo) -> Unit, onLongPress: (AppInfo) -> Unit, onClose: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize().background(Color(0xFF0D1420)).padding(horizontal = 16.dp, vertical = 20.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = "Fechar", tint = Color.White) }
-            Text("Aplicativos", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+    val scope = rememberCoroutineScope()
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+
+    val organizedApps = remember(apps) {
+        apps.sortedBy { it.label.lowercase(Locale("pt", "BR")) }
+    }
+
+    val grouped = remember(organizedApps) {
+        organizedApps.groupBy {
+            it.label.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "#"
+        }.toSortedMap(compareBy { if (it == "#") "{" else it })
+    }
+
+    val rows = remember(grouped) {
+        buildList {
+            grouped.forEach { (letter, letterApps) ->
+                add(DrawerRow.Header(letter))
+                letterApps.forEach { app -> add(DrawerRow.App(app)) }
+            }
         }
-        Spacer(Modifier.height(12.dp))
-        Surface(modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(18.dp), color = Color.White.copy(alpha = 0.10f)) {
-            Row(modifier = Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Search, contentDescription = null, tint = Color.White.copy(alpha = 0.7f))
+    }
+
+    val letterPositions = remember(rows) {
+        rows.mapIndexedNotNull { index, row ->
+            if (row is DrawerRow.Header) row.letter to index else null
+        }.toMap()
+    }
+
+    val alphabet = remember {
+        ('A'..'Z').map { it.toString() } + "#"
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0D1420))
+            .padding(horizontal = 18.dp, vertical = 16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onClose) {
+                Icon(Icons.Default.Close, contentDescription = "Fechar", tint = Color.White)
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Aplicativos",
+                    color = Color.White,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "${organizedApps.size} aplicativos",
+                    color = Color.White.copy(alpha = 0.45f),
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        Surface(
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape = RoundedCornerShape(18.dp),
+            color = Color.White.copy(alpha = 0.09f)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 15.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Search, contentDescription = null, tint = Color.White.copy(alpha = 0.68f))
                 Spacer(Modifier.width(10.dp))
-                androidx.compose.foundation.text.BasicTextField(value = query, onValueChange = onQueryChange, singleLine = true,
-                    modifier = Modifier.weight(1f), textStyle = LocalTextStyle.current.copy(color = Color.White))
-                if (query.isNotEmpty()) IconButton(onClick = { onQueryChange("") }) {
-                    Icon(Icons.Default.Close, contentDescription = "Limpar", tint = Color.White)
+                androidx.compose.foundation.text.BasicTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                    textStyle = LocalTextStyle.current.copy(color = Color.White, fontSize = 16.sp),
+                    decorationBox = { inner ->
+                        if (query.isBlank()) {
+                            Text("Buscar", color = Color.White.copy(alpha = 0.42f))
+                        }
+                        inner()
+                    }
+                )
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { onQueryChange("") }) {
+                        Icon(Icons.Default.Close, contentDescription = "Limpar", tint = Color.White.copy(alpha = 0.65f))
+                    }
                 }
             }
         }
-        var category by remember { mutableStateOf("Todos") }
-        var sortAz by remember { mutableStateOf(true) }
-        val categories = listOf("Todos", "Comunicação", "Trabalho", "Financeiro", "Social", "Entretenimento", "Ferramentas", "Outros")
-        val organizedApps = apps.filter { category == "Todos" || appCategory(it) == category }.let { list -> if (sortAz) list.sortedBy { it.label.lowercase(Locale("pt", "BR")) } else list.sortedByDescending { it.label.lowercase(Locale("pt", "BR")) } }
-        Spacer(Modifier.height(12.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("${organizedApps.size} aplicativos", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
-            IconButton(onClick = { sortAz = !sortAz }) { Icon(Icons.Default.Sort, contentDescription = "Ordenar", tint = Color.White.copy(alpha = 0.75f)) }
-        }
-        androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp), contentPadding = PaddingValues(vertical = 2.dp)) {
-            items(categories) { item -> FilterChip(selected = category == item, onClick = { category = item }, label = { Text(item, maxLines = 1) }) }
-        }
-        Spacer(Modifier.height(8.dp))
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 82.dp), modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 24.dp, top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            items(organizedApps, key = { it.packageName }) { app ->
-                AppItem(app, app.packageName in favorites, { onOpen(app) }, { onToggleFavorite(app) }, { onLongPress(app) })
+
+        Spacer(Modifier.height(10.dp))
+
+        Row(modifier = Modifier.fillMaxSize()) {
+            if (organizedApps.isEmpty()) {
+                Box(
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "Nenhum aplicativo encontrado",
+                        color = Color.White.copy(alpha = 0.55f)
+                    )
+                }
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    contentPadding = PaddingValues(top = 4.dp, bottom = 28.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    items(
+                        rows,
+                        key = { row ->
+                            when (row) {
+                                is DrawerRow.Header -> "header_${row.letter}"
+                                is DrawerRow.App -> row.app.packageName
+                            }
+                        }
+                    ) { row ->
+                        when (row) {
+                            is DrawerRow.Header -> {
+                                Text(
+                                    row.letter,
+                                    color = Color.White.copy(alpha = 0.42f),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(start = 8.dp, top = 10.dp, bottom = 4.dp)
+                                )
+                            }
+                            is DrawerRow.App -> {
+                                NiagaraAppRow(
+                                    app = row.app,
+                                    isFavorite = row.app.packageName in favorites,
+                                    onClick = { onOpen(row.app) },
+                                    onLongPress = { onLongPress(row.app) }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.width(5.dp))
+
+                Box(
+                    modifier = Modifier
+                        .width(28.dp)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(14.dp))
+                        .pointerInput(letterPositions, rows) {
+                            detectVerticalDragGestures(
+                                onVerticalDrag = { change, _ ->
+                                    val y = change.position.y.coerceIn(0f, size.height.toFloat())
+                                    val fraction = if (size.height > 0) y / size.height else 0f
+                                    val letterIndex = (fraction * alphabet.size).toInt()
+                                        .coerceIn(0, alphabet.lastIndex)
+                                    val letter = alphabet[letterIndex]
+                                    val target = letterPositions[letter]
+                                        ?: letterPositions.entries.minByOrNull {
+                                            kotlin.math.abs(it.key.first().code - letter.first().code)
+                                        }?.value
+                                    if (target != null) {
+                                        scope.launch { listState.scrollToItem(target) }
+                                    }
+                                    change.consume()
+                                }
+                            )
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxHeight().padding(vertical = 4.dp),
+                        verticalArrangement = Arrangement.SpaceEvenly,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        alphabet.forEach { letter ->
+                            Text(
+                                letter,
+                                color = Color.White.copy(alpha = 0.55f),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
 
+private sealed interface DrawerRow {
+    data class Header(val letter: String) : DrawerRow
+    data class App(val app: AppInfo) : DrawerRow
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun NiagaraAppRow(
+    app: AppInfo,
+    isFavorite: Boolean,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit
+) {
+    val iconBitmap = remember(app.packageName) {
+        app.icon.toBitmap(96, 96).asImageBitmap()
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(58.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .combinedClickable(onClick = onClick, onLongClick = onLongPress)
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Image(
+            bitmap = iconBitmap,
+            contentDescription = app.label,
+            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp))
+        )
+        Spacer(Modifier.width(14.dp))
+        Text(
+            app.label,
+            color = Color.White.copy(alpha = 0.93f),
+            style = MaterialTheme.typography.titleMedium,
+            maxLines = 1,
+            modifier = Modifier.weight(1f)
+        )
+        if (isFavorite) {
+            Icon(
+                Icons.Default.Star,
+                contentDescription = "Favorito",
+                tint = Color.White.copy(alpha = 0.28f),
+                modifier = Modifier.size(14.dp)
+            )
+        }
+    }
+}
 @Composable
 private fun QuickAppItem(app: AppInfo, onClick: () -> Unit) {
     Column(
