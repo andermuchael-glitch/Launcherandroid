@@ -56,6 +56,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -83,7 +84,6 @@ fun LauncherScreen() {
     var showDate by remember { mutableStateOf(context.getSharedPreferences("launcher", 0).getBoolean("show_date", true)) }
     val prefs = remember { context.getSharedPreferences("launcher", 0) }
     var compactMode by remember { mutableStateOf(prefs.getBoolean("compact", false)) }
-    var theme by remember { mutableStateOf(prefs.getString("theme", "azul") ?: "azul") }
     var iconSize by remember { mutableFloatStateOf(prefs.getFloat("icon_size", 48f)) }
     var wallpaperUri by remember { mutableStateOf(prefs.getString("wallpaper_uri", null)) }
     var wallpaperDownloading by remember { mutableStateOf(false) }
@@ -141,7 +141,6 @@ fun LauncherScreen() {
         LauncherSettings(
             showDate = showDate,
             compactMode = compactMode,
-            theme = theme,
             weatherCity = weatherCity,
             iconSize = iconSize,
             hasWallpaper = wallpaperBitmap != null,
@@ -161,7 +160,6 @@ fun LauncherScreen() {
                     wallpaperMessage = message
                 }
             },
-            onTheme = { theme = it; prefs.edit().putString("theme", it).apply() },
             onIconSize = { iconSize = it; prefs.edit().putFloat("icon_size", it).apply() },
             onShowDate = { showDate = it; context.getSharedPreferences("launcher", 0).edit().putBoolean("show_date", it).apply() },
             onCompact = { compactMode = it; context.getSharedPreferences("launcher", 0).edit().putBoolean("compact", it).apply() },
@@ -191,7 +189,7 @@ fun LauncherScreen() {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(launcherBackground(theme))
+            .background(launcherBackground())
             .pointerInput(Unit) {
                 detectVerticalDragGestures { _, dragAmount ->
                     if (dragAmount < -24f) drawerOpen = true
@@ -322,29 +320,10 @@ fun LauncherScreen() {
 
 @Composable
 private fun MinimalFavoriteItem(app: AppInfo, iconSize: Float, onClick: () -> Unit) {
-    val iconBitmap = remember(app.packageName) { app.icon.toBitmap(96, 96).asImageBitmap() }
-    Row(
-        modifier = Modifier.fillMaxWidth().height(50.dp).clip(RoundedCornerShape(15.dp)).clickable(onClick = onClick).padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Surface(
-            shape = RoundedCornerShape(13.dp),
-            color = Color.White.copy(alpha = 0.08f)
-        ) {
-            Image(
-                bitmap = iconBitmap,
-                contentDescription = app.label,
-                modifier = Modifier
-                    .padding(4.dp)
-                    .size(iconSize.coerceIn(36f, 44f).dp)
-                    .clip(RoundedCornerShape(11.dp))
-            )
-        }
-        Spacer(Modifier.width(11.dp))
-        Text(app.label, color = Color.White.copy(alpha = 0.92f), style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp), maxLines = 1)
+    Row(modifier = Modifier.fillMaxWidth().height(46.dp).clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(app.label, color = Color.White.copy(alpha = 0.92f), style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Serif, fontSize = 17.sp), maxLines = 1)
     }
 }
-
 @Composable
 private fun MinimalAddFavoriteItem(onClick: () -> Unit) {
     Row(
@@ -364,7 +343,7 @@ private fun ClockAndDate(showDate: Boolean) {
     val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(now)
     val date = SimpleDateFormat("EEEE, dd 'de' MMMM", Locale("pt", "BR")).format(now)
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(time, color = Color.White, fontSize = 60.sp, fontWeight = FontWeight.Light, letterSpacing = (-2).sp)
+        Text(time, color = Color.White, fontSize = 60.sp, fontWeight = FontWeight.Light, letterSpacing = (-2).sp, fontFamily = FontFamily.Serif)
         if (showDate) Text(date.replaceFirstChar { it.uppercase() }, color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.titleMedium)
     }
 }
@@ -501,7 +480,6 @@ private fun SearchField(value: String, onQueryChange: (String) -> Unit) {
 private fun LauncherSettings(
     showDate: Boolean,
     compactMode: Boolean,
-    theme: String,
     weatherCity: String,
     iconSize: Float,
     hasWallpaper: Boolean,
@@ -575,11 +553,11 @@ private fun LauncherSettings(
         Spacer(Modifier.height(16.dp))
         Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = Color.White.copy(alpha = 0.08f)) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Papéis sugeridos", color = Color.White, fontWeight = FontWeight.SemiBold)
-                Text("Coleção COSMIC/Pop!_OS em alta resolução. O download só acontece quando você escolher.", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall)
+                Text("Papéis de parede", color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text("Escolha uma imagem em alta resolução. O download só acontece quando você tocar nela.", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(12.dp))
                 androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(cosmicWallpapers) { option ->
+                    items(wallpaperOptions) { option ->
                         Surface(
                             modifier = Modifier.width(190.dp).height(118.dp).clickable(enabled = !wallpaperDownloading) { onSelectOnlineWallpaper(option) },
                             shape = RoundedCornerShape(16.dp),
@@ -863,46 +841,10 @@ private sealed interface DrawerRow {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun NiagaraAppRow(
-    app: AppInfo,
-    isFavorite: Boolean,
-    onClick: () -> Unit,
-    onLongPress: () -> Unit
-) {
-    val iconBitmap = remember(app.packageName) {
-        app.icon.toBitmap(96, 96).asImageBitmap()
-    }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(58.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .combinedClickable(onClick = onClick, onLongClick = onLongPress)
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Image(
-            bitmap = iconBitmap,
-            contentDescription = app.label,
-            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp))
-        )
-        Spacer(Modifier.width(14.dp))
-        Text(
-            app.label,
-            color = Color.White.copy(alpha = 0.93f),
-            style = MaterialTheme.typography.titleMedium,
-            maxLines = 1,
-            modifier = Modifier.weight(1f)
-        )
-        if (isFavorite) {
-            Icon(
-                Icons.Default.Star,
-                contentDescription = "Favorito",
-                tint = Color.White.copy(alpha = 0.28f),
-                modifier = Modifier.size(14.dp)
-            )
-        }
+private fun NiagaraAppRow(app: AppInfo, isFavorite: Boolean, onClick: () -> Unit, onLongPress: () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth().height(46.dp).clip(RoundedCornerShape(12.dp)).combinedClickable(onClick = onClick, onLongClick = onLongPress).padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(app.label, color = Color.White.copy(alpha = 0.90f), style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Serif, fontSize = 16.sp), maxLines = 1, modifier = Modifier.weight(1f))
+        if (isFavorite) Text("•", color = Color.White.copy(alpha = 0.35f), fontSize = 18.sp)
     }
 }
 @Composable
