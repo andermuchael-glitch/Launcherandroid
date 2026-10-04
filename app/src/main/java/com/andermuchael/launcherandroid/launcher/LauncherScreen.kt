@@ -588,17 +588,15 @@ private fun RowScope.AddFavoriteItem(onClick: () -> Unit) {
 @Composable
 private fun AppItem(app: AppInfo, isFavorite: Boolean, onClick: () -> Unit, onToggleFavorite: () -> Unit, onLongPress: () -> Unit) {
     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box {
-            AppIcon(app, onClick, onLongPress)
-            Surface(modifier = Modifier.size(26.dp).align(Alignment.TopEnd), shape = CircleShape, color = Color(0xFF0D1420).copy(alpha = 0.92f)) {
-                IconButton(onClick = onToggleFavorite) {
-                    Icon(if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder, contentDescription = "Favorito",
-                        tint = if (isFavorite) Color(0xFFFFC857) else Color.White.copy(alpha = 0.65f), modifier = Modifier.size(15.dp))
-                }
-            }
-        }
-        Text(app.label, color = Color.White.copy(alpha = 0.9f), maxLines = 2, textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 6.dp))
+        AppIcon(app, onClick, onLongPress)
+        Text(
+            app.label,
+            color = Color.White.copy(alpha = 0.9f),
+            maxLines = 2,
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(top = 6.dp)
+        )
     }
 }
 
