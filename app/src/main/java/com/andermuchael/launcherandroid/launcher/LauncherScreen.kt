@@ -84,6 +84,7 @@ fun LauncherScreen() {
     var wallpaperUri by remember { mutableStateOf(prefs.getString("wallpaper_uri", null)) }
     var wallpaperDownloading by remember { mutableStateOf(false) }
     var wallpaperMessage by remember { mutableStateOf<String?>(null) }
+    var weatherCity by remember { mutableStateOf(prefs.getString("weather_city", "") ?: "") }
     var folders by remember { mutableStateOf(loadFolders(prefs)) }
     var folderDialog by remember { mutableStateOf(false) }
     var selectedFolder by remember { mutableStateOf<LauncherFolder?>(null) }
@@ -98,6 +99,10 @@ fun LauncherScreen() {
 
     val filteredApps = apps.filter { query.isBlank() || it.label.contains(query, ignoreCase = true) }
     val favoriteApps = favorites.mapNotNull { pkg -> apps.find { it.packageName == pkg } }
+
+    val weather by produceState<WeatherData?>(initialValue = null, key1 = weatherCity) {
+        value = if (weatherCity.isBlank()) null else withContext(Dispatchers.IO) { fetchWeather(weatherCity) }
+    }
 
     val wallpaperBitmap by produceState<ImageBitmap?>(initialValue = null, key1 = wallpaperUri) {
         value = withContext(Dispatchers.IO) {
@@ -124,6 +129,7 @@ fun LauncherScreen() {
             showDate = showDate,
             compactMode = compactMode,
             theme = theme,
+            weatherCity = weatherCity,
             iconSize = iconSize,
             hasWallpaper = wallpaperBitmap != null,
             wallpaperDownloading = wallpaperDownloading,
@@ -146,6 +152,10 @@ fun LauncherScreen() {
             onIconSize = { iconSize = it; prefs.edit().putFloat("icon_size", it).apply() },
             onShowDate = { showDate = it; context.getSharedPreferences("launcher", 0).edit().putBoolean("show_date", it).apply() },
             onCompact = { compactMode = it; context.getSharedPreferences("launcher", 0).edit().putBoolean("compact", it).apply() },
+            onWeatherCitySave = { city ->
+                weatherCity = city.trim()
+                prefs.edit().putString("weather_city", weatherCity).apply()
+            },
             onClose = { settingsOpen = false }
         )
         return
@@ -191,6 +201,10 @@ fun LauncherScreen() {
 
             Spacer(Modifier.height(8.dp))
             ClockAndDate(showDate = showDate)
+            if (weatherCity.isNotBlank()) {
+                Spacer(Modifier.height(14.dp))
+                WeatherCard(weather = weather, configuredCity = weatherCity)
+            }
             Spacer(Modifier.height(if (compactMode) 18.dp else 28.dp))
             SearchField(value = query, onQueryChange = { query = it; drawerOpen = true })
 
@@ -309,6 +323,43 @@ private fun ClockAndDate(showDate: Boolean) {
 }
 
 @Composable
+private fun WeatherCard(weather: WeatherData?, configuredCity: String) {
+    Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = Color.White.copy(alpha = 0.08f)) {
+        if (weather == null) {
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White.copy(alpha = 0.7f))
+                Spacer(Modifier.width(10.dp))
+                Text("Carregando clima de $configuredCity…", color = Color.White.copy(alpha = 0.65f), style = MaterialTheme.typography.bodySmall)
+            }
+        } else {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(weatherEmoji(weather.code), fontSize = 28.sp)
+                    Spacer(Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(weather.city, color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                        Text(weatherDescription(weather.code), color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Text(weather.temperature.roundToInt().toString() + "°", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Light)
+                }
+                if (weather.days.size > 1) {
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        weather.days.take(5).forEach { day ->
+                            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(day.date.substringAfter("-").replace("-", "/"), color = Color.White.copy(alpha = 0.42f), style = MaterialTheme.typography.labelSmall)
+                                Text(weatherEmoji(day.code), fontSize = 15.sp)
+                                Text(day.max.roundToInt().toString() + "° " + day.min.roundToInt().toString() + "°", color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun SearchField(value: String, onQueryChange: (String) -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -338,6 +389,7 @@ private fun LauncherSettings(
     showDate: Boolean,
     compactMode: Boolean,
     theme: String,
+    weatherCity: String,
     iconSize: Float,
     hasWallpaper: Boolean,
     wallpaperDownloading: Boolean,
@@ -349,6 +401,7 @@ private fun LauncherSettings(
     onIconSize: (Float) -> Unit,
     onShowDate: (Boolean) -> Unit,
     onCompact: (Boolean) -> Unit,
+    onWeatherCitySave: (String) -> Unit,
     onClose: () -> Unit
 ) {
     Column(
@@ -368,6 +421,28 @@ private fun LauncherSettings(
                 SettingSwitch("Mostrar data", "Exibir a data abaixo do relógio", showDate, onShowDate)
                 HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
                 SettingSwitch("Modo compacto", "Reduzir os espaços da tela inicial", compactMode, onCompact)
+            }
+        }
+        Spacer(Modifier.height(18.dp))
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = Color.White.copy(alpha = 0.08f)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Previsão do tempo", color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text("Informe uma cidade. O launcher não usa rastreamento ou GPS.", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(10.dp))
+                var cityInput by remember(weatherCity) { mutableStateOf(weatherCity) }
+                OutlinedTextField(
+                    value = cityInput,
+                    onValueChange = { cityInput = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("Cidade") },
+                    placeholder = { Text("Ex.: São Paulo") },
+                    trailingIcon = { TextButton(onClick = { onWeatherCitySave(cityInput) }, enabled = cityInput.isNotBlank()) { Text("Salvar") } }
+                )
             }
         }
         Spacer(Modifier.height(24.dp))
