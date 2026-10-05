@@ -35,6 +35,15 @@ private object WeatherMemoryCache {
     var loadedAt: Long = 0L
 }
 
+fun cachedWeather(city: String): WeatherData? {
+    val normalized = city.trim()
+    if (normalized.isBlank()) return null
+    return WeatherMemoryCache.data?.takeIf {
+        WeatherMemoryCache.city.equals(normalized, ignoreCase = true) &&
+            System.currentTimeMillis() - WeatherMemoryCache.loadedAt < 50 * 60 * 1000L
+    }
+}
+
 fun fetchWeather(city: String): WeatherData? {
     val normalizedCity = city.trim()
     val now = System.currentTimeMillis()
