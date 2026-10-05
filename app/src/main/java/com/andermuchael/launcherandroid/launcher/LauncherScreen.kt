@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.AccessAlarm
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.produceState
@@ -91,6 +92,7 @@ fun LauncherScreen() {
     var wallpaperDownloading by remember { mutableStateOf(false) }
     var wallpaperMessage by remember { mutableStateOf<String?>(null) }
     var weatherCity by remember { mutableStateOf(prefs.getString("weather_city", "") ?: "") }
+    var weatherExpanded by rememberSaveable { mutableStateOf(false) }
     var folders by remember { mutableStateOf(loadFolders(prefs)) }
     var folderDialog by remember { mutableStateOf(false) }
     var selectedFolder by remember { mutableStateOf<LauncherFolder?>(null) }
@@ -210,10 +212,16 @@ fun LauncherScreen() {
                 .fillMaxSize()
                 .padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 8.dp)
         ) {
-            ClockAndDate(showDate = showDate)
+            Spacer(Modifier.height(18.dp))
+            ClockAndDate(showDate = showDate, onAlarm = { openAlarm(context) })
             if (weatherCity.isNotBlank()) {
                 Spacer(Modifier.height(10.dp))
-                WeatherCard(weather = weather, configuredCity = weatherCity)
+                WeatherCard(
+                    weather = weather,
+                    configuredCity = weatherCity,
+                    expanded = weatherExpanded,
+                    onToggle = { weatherExpanded = !weatherExpanded }
+                )
             }
             Spacer(Modifier.height(if (compactMode) 12.dp else 18.dp))
             SearchField(value = query, onQueryChange = { query = it; drawerOpen = true })
@@ -346,36 +354,111 @@ private fun MinimalAddFavoriteItem(onClick: () -> Unit) {
 }
 
 @Composable
-private fun ClockAndDate(showDate: Boolean) {
+private fun ClockAndDate(showDate: Boolean, onAlarm: () -> Unit) {
     var now by remember { mutableStateOf(Date()) }
-    LaunchedEffect(Unit) { while (true) { now = Date(); kotlinx.coroutines.delay(1000) } }
+    LaunchedEffect(Unit) {
+        while (true) {
+            now = Date()
+            kotlinx.coroutines.delay(1000)
+        }
+    }
     val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(now)
     val date = SimpleDateFormat("EEEE, dd 'de' MMMM", Locale("pt", "BR")).format(now)
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(time, color = Color.White, fontSize = 60.sp, fontWeight = FontWeight.Light, letterSpacing = (-2).sp, fontFamily = FontFamily.Serif)
-        if (showDate) Text(date.replaceFirstChar { it.uppercase() }, color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.titleMedium)
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                time,
+                color = Color.White,
+                fontSize = 60.sp,
+                fontWeight = FontWeight.Light,
+                letterSpacing = (-2).sp,
+                fontFamily = FontFamily.Serif
+            )
+            if (showDate) {
+                Text(
+                    date.replaceFirstChar { it.uppercase() },
+                    color = Color.White.copy(alpha = 0.72f),
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+        }
+
+        IconButton(
+            onClick = onAlarm,
+            modifier = Modifier.padding(start = 4.dp, top = 6.dp)
+        ) {
+            Icon(
+                Icons.Default.AccessAlarm,
+                contentDescription = "Alarme",
+                tint = Color.White.copy(alpha = 0.72f),
+                modifier = Modifier.size(22.dp)
+            )
+        }
     }
 }
 
 @Composable
-private fun WeatherCard(weather: WeatherData?, configuredCity: String) {
+private fun WeatherCard(
+    weather: WeatherData?,
+    configuredCity: String,
+    expanded: Boolean,
+    onToggle: () -> Unit
+) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = Color.White.copy(alpha = 0.09f)
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onToggle),
+        shape = RoundedCornerShape(16.dp),
+        color = Color.White.copy(alpha = 0.075f)
     ) {
         if (weather == null) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 9.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(15.dp),
                     strokeWidth = 2.dp,
-                    color = Color.White.copy(alpha = 0.7f)
+                    color = Color.White.copy(alpha = 0.65f)
                 )
                 Spacer(Modifier.width(8.dp))
-                Text("Carregando clima de $configuredCity…", color = Color.White.copy(alpha = 0.62f), style = MaterialTheme.typography.labelSmall)
+                Text(
+                    "Carregando clima de $configuredCity…",
+                    color = Color.White.copy(alpha = 0.58f),
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+        } else if (!expanded) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(weatherEmoji(weather.code), fontSize = 19.sp)
+                Spacer(Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        weather.city,
+                        color = Color.White.copy(alpha = 0.68f),
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1
+                    )
+                    Text(
+                        weatherDescription(weather.code),
+                        color = Color.White.copy(alpha = 0.48f),
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+                Text(
+                    weather.temperature.roundToInt().toString() + "°",
+                    color = Color.White.copy(alpha = 0.92f),
+                    fontSize = 21.sp,
+                    fontWeight = FontWeight.Light
+                )
             }
         } else {
             Column(modifier = Modifier.padding(horizontal = 13.dp, vertical = 8.dp)) {
@@ -408,6 +491,7 @@ private fun WeatherCard(weather: WeatherData?, configuredCity: String) {
         }
     }
 }
+
 @Composable
 private fun QuickNotesWidget(
     notes: List<String>,
@@ -1108,6 +1192,16 @@ private fun requestDefaultLauncher(context: Context) {
         }
     }
 }
+private fun openAlarm(context: Context) {
+    val now = java.util.Calendar.getInstance()
+    val intent = Intent(android.provider.AlarmClock.ACTION_SET_ALARM).apply {
+        putExtra(android.provider.AlarmClock.EXTRA_HOUR, now.get(java.util.Calendar.HOUR_OF_DAY))
+        putExtra(android.provider.AlarmClock.EXTRA_MINUTES, now.get(java.util.Calendar.MINUTE))
+        putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, false)
+    }
+    runCatching { context.startActivity(intent) }
+}
+
 private fun openApp(context: Context, packageName: String) {
     context.packageManager.getLaunchIntentForPackage(packageName)?.let { intent ->
         context.startActivity(intent)
