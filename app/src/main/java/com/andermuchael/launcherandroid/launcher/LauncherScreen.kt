@@ -441,6 +441,7 @@ fun LauncherScreen() {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MinimalFavoriteItem(
     app: AppInfo,
