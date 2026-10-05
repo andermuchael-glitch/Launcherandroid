@@ -1,6 +1,11 @@
 package com.andermuchael.launcherandroid.launcher
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.location.Geocoder
+import android.location.LocationManager
+import android.os.Looper
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.app.WallpaperManager
@@ -16,6 +21,7 @@ import androidx.compose.foundation.Image
 import coil.compose.AsyncImage
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -107,6 +113,29 @@ fun LauncherScreen() {
     var addToFolderApp by remember { mutableStateOf<AppInfo?>(null) }
     var quickNotes by remember { mutableStateOf(loadQuickNotes(prefs)) }
     var noteDraft by remember { mutableStateOf("") }
+    var locationLoading by remember { mutableStateOf(false) }
+    var locationMessage by remember { mutableStateOf<String?>(null) }
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val granted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true ||
+            permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        if (granted) {
+            locationLoading = true
+            locationMessage = null
+            requestWeatherLocation(context) { city, message ->
+                locationLoading = false
+                if (!city.isNullOrBlank()) {
+                    weatherCity = city
+                    prefs.edit().putString("weather_city", city).apply()
+                }
+                locationMessage = message
+            }
+        } else {
+            locationMessage = "Permissão de localização não concedida."
+        }
+    }
 
     LaunchedEffect(Unit) {
         if (apps.isEmpty()) {
@@ -201,6 +230,26 @@ fun LauncherScreen() {
                 weatherCity = city.trim()
                 prefs.edit().putString("weather_city", weatherCity).apply()
             },
+            locationLoading = locationLoading,
+            locationMessage = locationMessage,
+            onUseLocation = {
+                val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                if (fine || coarse) {
+                    locationLoading = true
+                    locationMessage = null
+                    requestWeatherLocation(context) { city, message ->
+                        locationLoading = false
+                        if (!city.isNullOrBlank()) {
+                            weatherCity = city
+                            prefs.edit().putString("weather_city", city).apply()
+                        }
+                        locationMessage = message
+                    }
+                } else {
+                    locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                }
+            },
             onSetDefaultLauncher = { requestDefaultLauncher(context) },
             onClose = { settingsOpen = false }
         )
@@ -242,7 +291,7 @@ fun LauncherScreen() {
                 .fillMaxSize()
                 .padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 8.dp)
         ) {
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(30.dp))
             ClockAndDate(showDate = showDate, onAlarm = { openAlarm(context) })
             if (weatherCity.isNotBlank()) {
                 Spacer(Modifier.height(10.dp))
@@ -447,7 +496,11 @@ private fun ClockAndDate(showDate: Boolean, onAlarm: () -> Unit) {
     val date = SimpleDateFormat("EEEE, dd 'de' MMMM", Locale("pt", "BR")).format(now)
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .clickable(onClick = onAlarm)
+            .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -469,17 +522,12 @@ private fun ClockAndDate(showDate: Boolean, onAlarm: () -> Unit) {
             }
         }
 
-        IconButton(
-            onClick = onAlarm,
-            modifier = Modifier.padding(start = 4.dp, top = 6.dp)
-        ) {
-            Icon(
+        Icon(
+            modifier = Modifier.padding(start = 4.dp, top = 6.dp).size(22.dp),
                 Icons.Default.AccessAlarm,
                 contentDescription = "Alarme",
                 tint = Color.White.copy(alpha = 0.72f),
-                modifier = Modifier.size(22.dp)
             )
-        }
     }
 }
 
@@ -666,6 +714,9 @@ private fun LauncherSettings(
     onShowDate: (Boolean) -> Unit,
     onCompact: (Boolean) -> Unit,
     onWeatherCitySave: (String) -> Unit,
+    locationLoading: Boolean,
+    locationMessage: String?,
+    onUseLocation: () -> Unit,
     onSetDefaultLauncher: () -> Unit,
     onClose: () -> Unit
 ) {
@@ -696,7 +747,21 @@ private fun LauncherSettings(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Previsão do tempo", color = Color.White, fontWeight = FontWeight.SemiBold)
-                Text("Informe uma cidade. O launcher não usa rastreamento ou GPS.", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall)
+                Text("Use a localização do celular ou informe uma cidade manualmente. A localização só é usada para descobrir a cidade do clima.", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(
+                    onClick = onUseLocation,
+                    enabled = !locationLoading,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    if (locationLoading) CircularProgressIndicator(modifier = Modifier.size(17.dp), strokeWidth = 2.dp)
+                    else Text("Usar localização atual")
+                }
+                if (!locationMessage.isNullOrBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(locationMessage, color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall)
+                }
                 Spacer(Modifier.height(10.dp))
                 var cityInput by remember(weatherCity) { mutableStateOf(weatherCity) }
                 OutlinedTextField(
@@ -1335,6 +1400,78 @@ private fun saveQuickNotes(prefs: android.content.SharedPreferences, notes: List
     prefs.edit().putStringSet("quick_notes", notes.takeLast(5).toSet()).apply()
 }
 
+private fun requestWeatherLocation(context: Context, onFinished: (String?, String?) -> Unit) {
+    val hasFine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    val hasCoarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    if (!hasFine && !hasCoarse) {
+        onFinished(null, "Permita a localização para usar o clima automático.")
+        return
+    }
+
+    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+    val provider = when {
+        hasFine && locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) -> LocationManager.GPS_PROVIDER
+        locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER) -> LocationManager.NETWORK_PROVIDER
+        else -> null
+    }
+
+    if (provider == null) {
+        onFinished(null, "Ative a localização do celular para continuar.")
+        return
+    }
+
+    fun resolve(latitude: Double, longitude: Double) {
+        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+            val city = runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    var result: String? = null
+                    val geocoder = Geocoder(context, Locale("pt", "BR"))
+                    geocoder.getFromLocation(latitude, longitude, 1) { addresses ->
+                        result = addresses.firstOrNull()?.locality
+                            ?: addresses.firstOrNull()?.subAdminArea
+                    }
+                    var waited = 0
+                    while (result == null && waited < 30) {
+                        kotlinx.coroutines.delay(100)
+                        waited++
+                    }
+                    result
+                } else {
+                    @Suppress("DEPRECATION")
+                    Geocoder(context, Locale("pt", "BR")).getFromLocation(latitude, longitude, 1)
+                        ?.firstOrNull()?.let { it.locality ?: it.subAdminArea }
+                }
+            }.getOrNull()
+            withContext(Dispatchers.Main) {
+                if (!city.isNullOrBlank()) onFinished(city, "Localização atual usada no clima.")
+                else onFinished(null, "Não foi possível identificar a cidade pela localização.")
+            }
+        }
+    }
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        val last = runCatching { locationManager.getLastKnownLocation(provider) }.getOrNull()
+        if (last != null) {
+            resolve(last.latitude, last.longitude)
+            return
+        }
+    }
+
+    val listener = object : android.location.LocationListener {
+        override fun onLocationChanged(location: android.location.Location) {
+            runCatching { locationManager.removeUpdates(this) }
+            resolve(location.latitude, location.longitude)
+        }
+        override fun onProviderEnabled(providerName: String) {}
+        override fun onProviderDisabled(providerName: String) {}
+    }
+    runCatching {
+        locationManager.requestLocationUpdates(provider, 0L, 0f, listener, Looper.getMainLooper())
+    }.onFailure {
+        onFinished(null, "Não foi possível obter a localização agora.")
+    }
+}
+
 private fun requestDefaultLauncher(context: Context) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         val roleManager = context.getSystemService(RoleManager::class.java)
@@ -1344,13 +1481,15 @@ private fun requestDefaultLauncher(context: Context) {
     }
 }
 private fun openAlarm(context: Context) {
-    val now = java.util.Calendar.getInstance()
-    val intent = Intent(android.provider.AlarmClock.ACTION_SET_ALARM).apply {
-        putExtra(android.provider.AlarmClock.EXTRA_HOUR, now.get(java.util.Calendar.HOUR_OF_DAY))
-        putExtra(android.provider.AlarmClock.EXTRA_MINUTES, now.get(java.util.Calendar.MINUTE))
+    val setAlarm = Intent(android.provider.AlarmClock.ACTION_SET_ALARM).apply {
         putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, false)
     }
-    runCatching { context.startActivity(intent) }
+    val showAlarms = Intent(android.provider.AlarmClock.ACTION_SHOW_ALARMS)
+    runCatching {
+        context.startActivity(setAlarm)
+    }.recoverCatching {
+        context.startActivity(showAlarms)
+    }
 }
 
 private fun openApp(context: Context, packageName: String) {
