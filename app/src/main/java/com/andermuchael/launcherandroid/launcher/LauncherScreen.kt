@@ -9,6 +9,8 @@ import android.os.Looper
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.app.WallpaperManager
+import android.appwidget.AppWidgetHost
+import android.appwidget.AppWidgetManager
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
