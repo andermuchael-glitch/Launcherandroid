@@ -67,6 +67,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -101,6 +102,21 @@ fun LauncherScreen() {
     var compactMode by remember { mutableStateOf(prefs.getBoolean("compact", false)) }
     var iconSize by remember { mutableFloatStateOf(prefs.getFloat("icon_size", 48f)) }
     var wallpaperUri by remember { mutableStateOf(prefs.getString("wallpaper_uri", null)) }
+    var widgetId by remember { mutableStateOf(prefs.getInt("widget_id", AppWidgetManager.INVALID_APPWIDGET_ID)) }
+    val appWidgetHost = remember { AppWidgetHost(context, 1024) }
+    val widgetPicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val id = result.data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID) ?: AppWidgetManager.INVALID_APPWIDGET_ID
+            if (id != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                widgetId = id
+                prefs.edit().putInt("widget_id", id).apply()
+            }
+        }
+    }
+    DisposableEffect(appWidgetHost) {
+        appWidgetHost.startListening()
+        onDispose { appWidgetHost.stopListening() }
+    }
     var wallpaperDownloading by remember { mutableStateOf(false) }
     var wallpaperMessage by remember { mutableStateOf<String?>(null) }
     var weatherCity by remember { mutableStateOf(prefs.getString("weather_city", "") ?: "") }
@@ -260,6 +276,18 @@ fun LauncherScreen() {
                     locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
                 }
             },
+            onAddWidget = {
+                val id = appWidgetHost.allocateAppWidgetId()
+                val intent = android.content.Intent(AppWidgetManager.ACTION_APPWIDGET_PICK).apply {
+                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+                }
+                widgetPicker.launch(intent)
+            },
+            onRemoveWidget = {
+                if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) appWidgetHost.deleteAppWidgetId(widgetId)
+                widgetId = AppWidgetManager.INVALID_APPWIDGET_ID
+                prefs.edit().remove("widget_id").apply()
+            },
             onSetDefaultLauncher = { requestDefaultLauncher(context) },
             onClose = { settingsOpen = false }
         )
@@ -311,6 +339,13 @@ fun LauncherScreen() {
                     expanded = weatherExpanded,
                     onToggle = { weatherExpanded = !weatherExpanded }
                 )
+            }
+            if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                AndroidView(
+                    factory = { appWidgetHost.createView(context, widgetId, AppWidgetManager.getInstance(context).getAppWidgetInfo(widgetId)) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp, max = 220.dp).clip(RoundedCornerShape(18.dp))
+                )
+                Spacer(Modifier.height(10.dp))
             }
             Spacer(Modifier.height(if (compactMode) 12.dp else 18.dp))
             SearchField(value = query, onQueryChange = { query = it; drawerOpen = true })
@@ -730,11 +765,13 @@ private fun LauncherSettings(
     locationMessage: String?,
     onUseManualWeather: () -> Unit,
     onUseLocation: () -> Unit,
+    onAddWidget: () -> Unit,
+    onRemoveWidget: () -> Unit,
     onSetDefaultLauncher: () -> Unit,
     onClose: () -> Unit
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().background(Color(0xFF0D1420)).padding(horizontal = 20.dp, vertical = 22.dp)
+        modifier = Modifier.fillMaxSize().background(Color(0xFF0D1420))
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onClose) {
@@ -743,6 +780,9 @@ private fun LauncherSettings(
             Text("Configurações do Launcher", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
         }
         Spacer(Modifier.height(26.dp))
+        androidx.compose.foundation.layout.Column(
+            modifier = Modifier.weight(1f).verticalScroll(androidx.compose.foundation.rememberScrollState())
+        ) {
         Text("Tela inicial", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
         Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = Color.White.copy(alpha = 0.08f)) {
@@ -852,6 +892,20 @@ private fun LauncherSettings(
             }
         }
         Spacer(Modifier.height(24.dp))
+        Text("Widgets", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
+        Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = Color.White.copy(alpha = 0.08f)) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Widgets sobre a tela inicial", color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text("Adicione um widget do Android diretamente à tela inicial.", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onAddWidget, modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)) { Text("Adicionar widget") }
+                    if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) OutlinedButton(onClick = onRemoveWidget, shape = RoundedCornerShape(14.dp)) { Text("Remover") }
+                }
+            }
+        }
+        Spacer(Modifier.height(24.dp))
         Text("Sistema", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
         OutlinedButton(
@@ -862,6 +916,8 @@ private fun LauncherSettings(
         ) { Text("Launcher padrão do Android") }
         Spacer(Modifier.height(8.dp))
         Text("Escolha o Launcherandroid como aplicativo de tela inicial padrão nas configurações do Android.", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
+        Spacer(Modifier.height(28.dp))
+        }
     }
 }
 
