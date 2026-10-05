@@ -80,10 +80,15 @@ import kotlinx.coroutines.delay
 fun LauncherScreen() {
     val context = LocalContext.current
     val repository = remember { AppRepository(context) }
-    var apps by remember { mutableStateOf(emptyList<AppInfo>()) }
+    var apps by remember { mutableStateOf(AppRepository.cachedApps()) }
     var query by remember { mutableStateOf("") }
     var drawerOpen by remember { mutableStateOf(false) }
-    var favorites by remember { mutableStateOf(listOf<String>()) }
+    var favorites by remember {
+        mutableStateOf(
+            context.getSharedPreferences("launcher", 0)
+                .getStringSet("favorites", emptySet())?.toList() ?: emptyList()
+        )
+    }
     var settingsOpen by remember { mutableStateOf(false) }
     var showDate by remember { mutableStateOf(context.getSharedPreferences("launcher", 0).getBoolean("show_date", true)) }
     val prefs = remember { context.getSharedPreferences("launcher", 0) }
@@ -103,21 +108,25 @@ fun LauncherScreen() {
     var noteDraft by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
-        apps = withContext(Dispatchers.IO) { repository.getLaunchableApps() }
-        favorites = context.getSharedPreferences("launcher", 0)
-            .getStringSet("favorites", emptySet())?.toList() ?: emptyList()
+        if (apps.isEmpty()) {
+            apps = withContext(Dispatchers.IO) { repository.getLaunchableApps() }
+        }
     }
 
     val filteredApps = apps.filter { query.isBlank() || it.label.contains(query, ignoreCase = true) }
     val favoriteApps = favorites.mapNotNull { pkg -> apps.find { it.packageName == pkg } }
 
-    val weather by produceState<WeatherData?>(initialValue = null, key1 = weatherCity) {
+    val weather by produceState<WeatherData?>(initialValue = cachedWeather(weatherCity), key1 = weatherCity) {
         if (weatherCity.isBlank()) {
             value = null
         } else {
-            while (true) {
+            if (value == null) {
                 value = withContext(Dispatchers.IO) { fetchWeather(weatherCity) }
+            }
+            while (true) {
                 delay(60 * 60 * 1000L)
+                val refreshed = withContext(Dispatchers.IO) { fetchWeather(weatherCity) }
+                if (refreshed != null) value = refreshed
             }
         }
     }
