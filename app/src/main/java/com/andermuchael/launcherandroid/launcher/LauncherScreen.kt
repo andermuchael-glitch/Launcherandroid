@@ -101,6 +101,7 @@ fun LauncherScreen() {
     var weatherExpanded by rememberSaveable { mutableStateOf(false) }
     var folders by remember { mutableStateOf(loadFolders(prefs)) }
     var folderDialog by remember { mutableStateOf(false) }
+    var folderOpen by remember { mutableStateOf(false) }
     var selectedFolder by remember { mutableStateOf<LauncherFolder?>(null) }
     var longPressApp by remember { mutableStateOf<AppInfo?>(null) }
     var addToFolderApp by remember { mutableStateOf<AppInfo?>(null) }
@@ -145,6 +146,25 @@ fun LauncherScreen() {
     }
     if (addToFolderApp != null) {
         AddToFolderDialog(app = addToFolderApp!!, folders = folders, onDismiss = { addToFolderApp = null }, onAdd = { folder -> folders = addAppToFolder(prefs, folders, folder, addToFolderApp!!.packageName); addToFolderApp = null }, onNewFolder = { addToFolderApp = null; selectedFolder = null; folderDialog = true })
+    }
+
+    if (folderOpen && selectedFolder != null) {
+        FolderAppsDialog(
+            folder = selectedFolder!!,
+            apps = apps,
+            onOpenApp = { packageName ->
+                folderOpen = false
+                openApp(context, packageName)
+            },
+            onEdit = {
+                folderOpen = false
+                folderDialog = true
+            },
+            onDismiss = {
+                folderOpen = false
+                selectedFolder = null
+            }
+        )
     }
 
     if (folderDialog) {
@@ -262,19 +282,41 @@ fun LauncherScreen() {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     folders.take(3).forEach { folder ->
                         Surface(
-                            modifier = Modifier.weight(1f).height(54.dp).clickable {
-                                selectedFolder = folder
-                                folderDialog = true
-                            },
+                            modifier = Modifier.weight(1f).height(54.dp),
                             shape = RoundedCornerShape(16.dp),
                             color = Color.White.copy(alpha = 0.07f)
                         ) {
-                            Row(modifier = Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Folder, contentDescription = null, tint = Color.White.copy(alpha = 0.72f), modifier = Modifier.size(20.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Column {
-                                    Text(folder.name, color = Color.White, maxLines = 1, style = MaterialTheme.typography.labelMedium)
-                                    Text("${folder.packages.size}", color = Color.White.copy(alpha = 0.45f), style = MaterialTheme.typography.labelSmall)
+                            Row(
+                                modifier = Modifier.fillMaxSize().padding(start = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    modifier = Modifier.weight(1f).fillMaxHeight().clickable {
+                                        selectedFolder = folder
+                                        folderOpen = true
+                                    },
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Folder, contentDescription = null, tint = Color.White.copy(alpha = 0.72f), modifier = Modifier.size(20.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Column {
+                                        Text(folder.name, color = Color.White, maxLines = 1, style = MaterialTheme.typography.labelMedium)
+                                        Text("${folder.packages.size}", color = Color.White.copy(alpha = 0.45f), style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+                                IconButton(
+                                    onClick = {
+                                        selectedFolder = folder
+                                        folderDialog = true
+                                    },
+                                    modifier = Modifier.size(42.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.MoreVert,
+                                        contentDescription = "Editar pasta",
+                                        tint = Color.White.copy(alpha = 0.55f),
+                                        modifier = Modifier.size(20.dp)
+                                    )
                                 }
                             }
                         }
@@ -1076,6 +1118,76 @@ private fun upsertFolder(prefs: android.content.SharedPreferences, folders: List
     val next = (folders.filterNot { it.id == folder.id } + folder).take(8)
     saveFolders(prefs, next)
     return next
+}
+
+@Composable
+private fun FolderAppsDialog(
+    folder: LauncherFolder,
+    apps: List<AppInfo>,
+    onOpenApp: (String) -> Unit,
+    onEdit: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val folderApps = folder.packages.mapNotNull { pkg ->
+        apps.find { it.packageName == pkg }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Folder, contentDescription = null)
+                Spacer(Modifier.width(10.dp))
+                Text(folder.name, modifier = Modifier.weight(1f))
+                IconButton(onClick = onEdit) {
+                    Icon(Icons.Default.EditNote, contentDescription = "Editar pasta")
+                }
+            }
+        },
+        text = {
+            if (folderApps.isEmpty()) {
+                Text("Esta pasta está vazia.")
+            } else {
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 360.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(folderApps, key = { it.packageName }) { app ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable { onOpenApp(app.packageName) }
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Image(
+                                bitmap = app.icon.toBitmap(80, 80).asImageBitmap(),
+                                contentDescription = app.label,
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                app.label,
+                                maxLines = 2,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Fechar")
+            }
+        }
+    )
 }
 
 @Composable
