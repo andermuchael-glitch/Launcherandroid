@@ -236,6 +236,11 @@ fun LauncherScreen() {
             },
             locationLoading = locationLoading,
             locationMessage = locationMessage,
+            onUseManualWeather = {
+                weatherUsingLocation = false
+                locationMessage = "Modo manual ativado. Informe uma cidade."
+                prefs.edit().putBoolean("weather_using_location", false).apply()
+            },
             onUseLocation = {
                 val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
                 val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -723,6 +728,7 @@ private fun LauncherSettings(
     onWeatherCitySave: (String) -> Unit,
     locationLoading: Boolean,
     locationMessage: String?,
+    onUseManualWeather: () -> Unit,
     onUseLocation: () -> Unit,
     onSetDefaultLauncher: () -> Unit,
     onClose: () -> Unit
@@ -767,7 +773,7 @@ private fun LauncherSettings(
                 }
                 if (weatherUsingLocation) {
                     Spacer(Modifier.height(6.dp))
-                    TextButton(onClick = onUseLocation) { Text("Atualizar localização") }
+                    TextButton(onClick = onUseManualWeather) { Text("Usar uma cidade manualmente") }
                 }
                 if (!locationMessage.isNullOrBlank()) {
                     Spacer(Modifier.height(6.dp))
