@@ -346,7 +346,12 @@ fun LauncherScreen() {
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 items(favoriteApps.take(12), key = { it.packageName }) { app ->
-                    MinimalFavoriteItem(app = app, iconSize = iconSize) { openApp(context, app.packageName) }
+                    MinimalFavoriteItem(
+                        app = app,
+                        iconSize = iconSize,
+                        onClick = { openApp(context, app.packageName) },
+                        onLongPress = { longPressApp = app }
+                    )
                 }
                 item {
                     MinimalAddFavoriteItem { drawerOpen = true }
@@ -388,9 +393,33 @@ fun LauncherScreen() {
 }
 
 @Composable
-private fun MinimalFavoriteItem(app: AppInfo, iconSize: Float, onClick: () -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth().height(46.dp).clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(app.label, color = Color.White.copy(alpha = 0.92f), style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Serif, fontSize = 17.sp), maxLines = 1)
+private fun MinimalFavoriteItem(
+    app: AppInfo,
+    iconSize: Float,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(46.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongPress
+            )
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            app.label,
+            color = Color.White.copy(alpha = 0.92f),
+            style = MaterialTheme.typography.bodyLarge.copy(
+                fontFamily = FontFamily.Serif,
+                fontSize = 17.sp
+            ),
+            maxLines = 1
+        )
     }
 }
 @Composable
