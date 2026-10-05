@@ -757,7 +757,7 @@ private fun LauncherSettings(
                     shape = RoundedCornerShape(14.dp)
                 ) {
                     if (locationLoading) CircularProgressIndicator(modifier = Modifier.size(17.dp), strokeWidth = 2.dp)
-                    else Text("Usar localização atual")
+                    else Text(if (locationMessage == "Localização atual usada no clima.") "✓ Usando localização atual" else "Usar localização atual")
                 }
                 if (!locationMessage.isNullOrBlank()) {
                     Spacer(Modifier.height(6.dp))
@@ -769,6 +769,7 @@ private fun LauncherSettings(
                     value = cityInput,
                     onValueChange = { cityInput = it },
                     modifier = Modifier.fillMaxWidth(),
+                    enabled = locationMessage != "Localização atual usada no clima.",
                     singleLine = true,
                     label = { Text("Cidade") },
                     placeholder = { Text("Ex.: São Paulo") },
@@ -793,13 +794,13 @@ private fun LauncherSettings(
         Spacer(Modifier.height(16.dp))
         Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = Color.White.copy(alpha = 0.08f)) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Papéis de parede", color = Color.White, fontWeight = FontWeight.SemiBold)
-                Text("Escolha uma imagem em alta resolução. O download só acontece quando você tocar nela.", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall)
+                Text("Papéis de parede", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
+                Text("Escolha uma imagem em alta resolução. Toque para aplicar.", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(12.dp))
                 androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(wallpaperOptions) { option ->
                         Surface(
-                            modifier = Modifier.width(190.dp).height(118.dp).clickable(enabled = !wallpaperDownloading) { onSelectOnlineWallpaper(option) },
+                            modifier = Modifier.width(210.dp).height(132.dp).clickable(enabled = !wallpaperDownloading) { onSelectOnlineWallpaper(option) },
                             shape = RoundedCornerShape(16.dp),
                             color = Color.White.copy(alpha = 0.06f)
                         ) {
