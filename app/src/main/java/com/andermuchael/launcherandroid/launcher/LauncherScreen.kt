@@ -223,6 +223,7 @@ fun LauncherScreen() {
             compactMode = compactMode,
             weatherCity = weatherCity,
             weatherUsingLocation = weatherUsingLocation,
+            widgetId = widgetId,
             iconSize = iconSize,
             hasWallpaper = wallpaperBitmap != null,
             wallpaperDownloading = wallpaperDownloading,
@@ -342,7 +343,11 @@ fun LauncherScreen() {
             }
             if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                 AndroidView(
-                    factory = { appWidgetHost.createView(context, widgetId, AppWidgetManager.getInstance(context).getAppWidgetInfo(widgetId)) },
+                    factory = {
+                        val info = AppWidgetManager.getInstance(context).getAppWidgetInfo(widgetId)
+                            ?: throw IllegalStateException("Widget não encontrado")
+                        appWidgetHost.createView(context, widgetId, info)
+                    },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp, max = 220.dp).clip(RoundedCornerShape(18.dp))
                 )
                 Spacer(Modifier.height(10.dp))
@@ -750,6 +755,7 @@ private fun LauncherSettings(
     compactMode: Boolean,
     weatherCity: String,
     weatherUsingLocation: Boolean,
+    widgetId: Int,
     iconSize: Float,
     hasWallpaper: Boolean,
     wallpaperDownloading: Boolean,
