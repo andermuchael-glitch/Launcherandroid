@@ -206,6 +206,7 @@ fun LauncherScreen() {
             showDate = showDate,
             compactMode = compactMode,
             weatherCity = weatherCity,
+            weatherUsingLocation = weatherUsingLocation,
             iconSize = iconSize,
             hasWallpaper = wallpaperBitmap != null,
             wallpaperDownloading = wallpaperDownloading,
@@ -708,6 +709,7 @@ private fun LauncherSettings(
     showDate: Boolean,
     compactMode: Boolean,
     weatherCity: String,
+    weatherUsingLocation: Boolean,
     iconSize: Float,
     hasWallpaper: Boolean,
     wallpaperDownloading: Boolean,
@@ -765,11 +767,7 @@ private fun LauncherSettings(
                 }
                 if (weatherUsingLocation) {
                     Spacer(Modifier.height(6.dp))
-                    TextButton(onClick = {
-                        weatherUsingLocation = false
-                        locationMessage = "Modo manual ativado. Informe uma cidade."
-                        prefs.edit().putBoolean("weather_using_location", false).apply()
-                    }) { Text("Usar uma cidade manualmente") }
+                    TextButton(onClick = onUseLocation) { Text("Atualizar localização") }
                 }
                 if (!locationMessage.isNullOrBlank()) {
                     Spacer(Modifier.height(6.dp))
