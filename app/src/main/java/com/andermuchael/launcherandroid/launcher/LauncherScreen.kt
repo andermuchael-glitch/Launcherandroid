@@ -104,6 +104,7 @@ fun LauncherScreen() {
     var wallpaperDownloading by remember { mutableStateOf(false) }
     var wallpaperMessage by remember { mutableStateOf<String?>(null) }
     var weatherCity by remember { mutableStateOf(prefs.getString("weather_city", "") ?: "") }
+    var weatherUsingLocation by remember { mutableStateOf(prefs.getBoolean("weather_using_location", false)) }
     var weatherExpanded by rememberSaveable { mutableStateOf(false) }
     var folders by remember { mutableStateOf(loadFolders(prefs)) }
     var folderDialog by remember { mutableStateOf(false) }
@@ -228,7 +229,9 @@ fun LauncherScreen() {
             onCompact = { compactMode = it; context.getSharedPreferences("launcher", 0).edit().putBoolean("compact", it).apply() },
             onWeatherCitySave = { city ->
                 weatherCity = city.trim()
-                prefs.edit().putString("weather_city", weatherCity).apply()
+                weatherUsingLocation = false
+                locationMessage = "Cidade definida manualmente."
+                prefs.edit().putString("weather_city", weatherCity).putBoolean("weather_using_location", false).apply()
             },
             locationLoading = locationLoading,
             locationMessage = locationMessage,
@@ -242,7 +245,8 @@ fun LauncherScreen() {
                         locationLoading = false
                         if (!city.isNullOrBlank()) {
                             weatherCity = city
-                            prefs.edit().putString("weather_city", city).apply()
+                            weatherUsingLocation = true
+                            prefs.edit().putString("weather_city", city).putBoolean("weather_using_location", true).apply()
                         }
                         locationMessage = message
                     }
@@ -757,7 +761,15 @@ private fun LauncherSettings(
                     shape = RoundedCornerShape(14.dp)
                 ) {
                     if (locationLoading) CircularProgressIndicator(modifier = Modifier.size(17.dp), strokeWidth = 2.dp)
-                    else Text(if (locationMessage == "Localização atual usada no clima.") "✓ Usando localização atual" else "Usar localização atual")
+                    else Text(if (weatherUsingLocation) "✓ Usando localização atual" else "Usar localização atual")
+                }
+                if (weatherUsingLocation) {
+                    Spacer(Modifier.height(6.dp))
+                    TextButton(onClick = {
+                        weatherUsingLocation = false
+                        locationMessage = "Modo manual ativado. Informe uma cidade."
+                        prefs.edit().putBoolean("weather_using_location", false).apply()
+                    }) { Text("Usar uma cidade manualmente") }
                 }
                 if (!locationMessage.isNullOrBlank()) {
                     Spacer(Modifier.height(6.dp))
@@ -769,7 +781,7 @@ private fun LauncherSettings(
                     value = cityInput,
                     onValueChange = { cityInput = it },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = locationMessage != "Localização atual usada no clima.",
+                    enabled = !weatherUsingLocation,
                     singleLine = true,
                     label = { Text("Cidade") },
                     placeholder = { Text("Ex.: São Paulo") },
