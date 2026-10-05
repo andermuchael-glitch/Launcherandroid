@@ -9,6 +9,8 @@ class AppRepository(private val context: Context) {
     companion object {
         @Volatile private var cachedApps: List<AppInfo>? = null
 
+        fun cachedApps(): List<AppInfo> = cachedApps.orEmpty()
+
         fun invalidateCache() {
             cachedApps = null
         }
