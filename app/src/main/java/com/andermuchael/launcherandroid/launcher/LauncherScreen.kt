@@ -523,11 +523,11 @@ private fun ClockAndDate(showDate: Boolean, onAlarm: () -> Unit) {
         }
 
         Icon(
-            modifier = Modifier.padding(start = 4.dp, top = 6.dp).size(22.dp),
-                Icons.Default.AccessAlarm,
-                contentDescription = "Alarme",
-                tint = Color.White.copy(alpha = 0.72f),
-            )
+            Icons.Default.AccessAlarm,
+            contentDescription = "Alarme",
+            tint = Color.White.copy(alpha = 0.72f),
+            modifier = Modifier.padding(start = 4.dp, top = 6.dp).size(22.dp)
+        )
     }
 }
 
