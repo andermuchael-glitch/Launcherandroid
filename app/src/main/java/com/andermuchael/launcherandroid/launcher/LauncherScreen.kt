@@ -9,6 +9,7 @@ import android.os.Looper
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.app.WallpaperManager
+import android.app.ActivityManager
 import android.appwidget.AppWidgetHost
 import android.appwidget.AppWidgetManager
 import java.io.File
@@ -86,6 +87,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import coil.Coil
 
 @Composable
 fun LauncherScreen() {
@@ -105,6 +107,9 @@ fun LauncherScreen() {
     val prefs = remember { context.getSharedPreferences("launcher", 0) }
     var compactMode by remember { mutableStateOf(prefs.getBoolean("compact", false)) }
     var iconSize by remember { mutableFloatStateOf(prefs.getFloat("icon_size", 48f)) }
+    var clockSize by remember { mutableFloatStateOf(prefs.getFloat("clock_size", 78f)) }
+    var wallpaperDim by remember { mutableFloatStateOf(prefs.getFloat("wallpaper_dim", 0.38f)) }
+    var memoryMessage by remember { mutableStateOf<String?>(null) }
     var wallpaperUri by remember { mutableStateOf(prefs.getString("wallpaper_uri", null)) }
     var widgetId by remember { mutableStateOf(prefs.getInt("widget_id", AppWidgetManager.INVALID_APPWIDGET_ID)) }
     val appWidgetHost = remember { AppWidgetHost(context, 1024) }
@@ -183,9 +188,7 @@ fun LauncherScreen() {
     }
 
     val wallpaperBitmap by produceState<ImageBitmap?>(initialValue = null, key1 = wallpaperUri) {
-        value = withContext(Dispatchers.IO) {
-            wallpaperUri?.let { runCatching { context.contentResolver.openInputStream(Uri.parse(it))?.use(BitmapFactory::decodeStream)?.asImageBitmap() }.getOrNull() }
-        }
+        value = withContext(Dispatchers.IO) { wallpaperUri?.let { decodeWallpaper(context, Uri.parse(it)) } }
     }
     val wallpaperPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) { wallpaperUri = uri.toString(); prefs.edit().putString("wallpaper_uri", uri.toString()).apply() }
@@ -229,6 +232,9 @@ fun LauncherScreen() {
             weatherUsingLocation = weatherUsingLocation,
             widgetId = widgetId,
             iconSize = iconSize,
+            clockSize = clockSize,
+            wallpaperDim = wallpaperDim,
+            memoryMessage = memoryMessage,
             hasWallpaper = wallpaperBitmap != null,
             wallpaperDownloading = wallpaperDownloading,
             wallpaperMessage = wallpaperMessage,
@@ -247,6 +253,9 @@ fun LauncherScreen() {
                 }
             },
             onIconSize = { iconSize = it; prefs.edit().putFloat("icon_size", it).apply() },
+            onClockSize = { clockSize = it; prefs.edit().putFloat("clock_size", it).apply() },
+            onWallpaperDim = { wallpaperDim = it; prefs.edit().putFloat("wallpaper_dim", it).apply() },
+            onOptimizeMemory = { memoryMessage = optimizeLauncherMemory(context) },
             onShowDate = { showDate = it; context.getSharedPreferences("launcher", 0).edit().putBoolean("show_date", it).apply() },
             onCompact = { compactMode = it; context.getSharedPreferences("launcher", 0).edit().putBoolean("compact", it).apply() },
             onWeatherCitySave = { city ->
@@ -326,7 +335,7 @@ fun LauncherScreen() {
         val currentWallpaper = wallpaperBitmap
         if (currentWallpaper != null) {
             Image(bitmap = currentWallpaper, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.38f)))
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = wallpaperDim)))
         }
 
         Column(
@@ -335,7 +344,7 @@ fun LauncherScreen() {
                 .padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 8.dp)
         ) {
             Spacer(Modifier.height(30.dp))
-            ClockAndDate(showDate = showDate, onAlarm = { openAlarm(context) })
+            ClockAndDate(showDate = showDate, clockSize = clockSize, onAlarm = { openAlarm(context) })
             if (weatherCity.isNotBlank()) {
                 Spacer(Modifier.height(10.dp))
                 WeatherCard(
@@ -539,7 +548,7 @@ private fun MinimalAddFavoriteItem(onClick: () -> Unit) {
 }
 
 @Composable
-private fun ClockAndDate(showDate: Boolean, onAlarm: () -> Unit) {
+private fun ClockAndDate(showDate: Boolean, clockSize: Float, onAlarm: () -> Unit) {
     var now by remember { mutableStateOf(Date()) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -761,6 +770,9 @@ private fun LauncherSettings(
     weatherUsingLocation: Boolean,
     widgetId: Int,
     iconSize: Float,
+    clockSize: Float,
+    wallpaperDim: Float,
+    memoryMessage: String?,
     hasWallpaper: Boolean,
     wallpaperDownloading: Boolean,
     wallpaperMessage: String?,
@@ -768,6 +780,9 @@ private fun LauncherSettings(
     onSelectOnlineWallpaper: (WallpaperOption) -> Unit,
     onRemoveWallpaper: () -> Unit,
     onIconSize: (Float) -> Unit,
+    onClockSize: (Float) -> Unit,
+    onWallpaperDim: (Float) -> Unit,
+    onOptimizeMemory: () -> Unit,
     onShowDate: (Boolean) -> Unit,
     onCompact: (Boolean) -> Unit,
     onWeatherCitySave: (String) -> Unit,
@@ -899,6 +914,14 @@ private fun LauncherSettings(
                 Text("Ajuste o tamanho sem aplicar temas.", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(8.dp))
                 Slider(value = iconSize, onValueChange = onIconSize, valueRange = 36f..52f, steps = 7)
+                Spacer(Modifier.height(10.dp))
+                Text("Tamanho do relógio", color = Color.White, fontWeight = FontWeight.Medium)
+                Text(clockSize.roundToInt().toString() + " dp", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
+                Slider(value = clockSize, onValueChange = onClockSize, valueRange = 64f..96f, steps = 7)
+                Spacer(Modifier.height(6.dp))
+                Text("Escurecer papel de parede", color = Color.White, fontWeight = FontWeight.Medium)
+                Text((wallpaperDim * 100).roundToInt().toString() + "%", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
+                Slider(value = wallpaperDim, onValueChange = onWallpaperDim, valueRange = 0.10f..0.60f, steps = 9)
             }
         }
         Spacer(Modifier.height(24.dp))
@@ -916,6 +939,18 @@ private fun LauncherSettings(
             }
         }
         Spacer(Modifier.height(24.dp))
+        Text("Desempenho", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
+        Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = Color.White.copy(alpha = 0.08f)) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Otimizar memória", color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text("Libera o cache visual do Launcher e solicita a coleta de memória do próprio aplicativo. O Android continua gerenciando a RAM dos outros aplicativos.", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(12.dp))
+                Button(onClick = onOptimizeMemory, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) { Text("Otimizar memória") }
+                memoryMessage?.let { Spacer(Modifier.height(8.dp)); Text(it, color = Color.White.copy(alpha = 0.65f), style = MaterialTheme.typography.bodySmall) }
+            }
+        }
+        Spacer(Modifier.height(24.dp))
         Text("Sistema", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
         OutlinedButton(
@@ -929,6 +964,33 @@ private fun LauncherSettings(
         Spacer(Modifier.height(28.dp))
         }
     }
+}
+
+private fun decodeWallpaper(context: Context, uri: Uri): ImageBitmap? {
+    return runCatching {
+        val resolver = context.contentResolver
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        val metrics = context.resources.displayMetrics
+        val targetW = metrics.widthPixels * 2
+        val targetH = metrics.heightPixels * 2
+        var sample = 1
+        while (bounds.outWidth / sample > targetW * 1.5 || bounds.outHeight / sample > targetH * 1.5) sample *= 2
+        val options = BitmapFactory.Options().apply { inSampleSize = sample; inPreferredConfig = android.graphics.Bitmap.Config.RGB_565 }
+        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options)?.asImageBitmap() }
+    }.getOrNull()
+}
+
+private fun optimizeLauncherMemory(context: Context): String {
+    return runCatching {
+        Coil.imageLoader(context).memoryCache?.clear()
+        val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val after = ActivityManager.MemoryInfo().also { manager.getMemoryInfo(it) }
+        Runtime.getRuntime().gc()
+        val finalInfo = ActivityManager.MemoryInfo().also { manager.getMemoryInfo(it) }
+        "Memória do Launcher otimizada. RAM disponível: " + (finalInfo.availMem / (1024 * 1024)) + " MB."
+    }.getOrElse { "Não foi possível otimizar a memória agora." }
 }
 
 private fun launcherBackground(): Brush =
