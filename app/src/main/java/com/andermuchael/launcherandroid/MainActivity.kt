@@ -14,6 +14,7 @@ import com.andermuchael.launcherandroid.launcher.LauncherScreen
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.setWindowAnimations(0)
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = AndroidColor.TRANSPARENT
