@@ -112,17 +112,47 @@ fun LauncherScreen() {
     var themeName by remember { mutableStateOf(prefs.getString("launcher_theme", "Midnight") ?: "Midnight") }
     var iconStyle by remember { mutableStateOf(prefs.getString("icon_style", "Arredondado") ?: "Arredondado") }
     var widgetMessage by remember { mutableStateOf<String?>(null) }
+    var pendingWidgetPickId by remember { mutableIntStateOf(AppWidgetManager.INVALID_APPWIDGET_ID) }
     var memoryMessage by remember { mutableStateOf<String?>(null) }
     var wallpaperUri by remember { mutableStateOf(prefs.getString("wallpaper_uri", null)) }
     var widgetId by remember { mutableStateOf(prefs.getInt("widget_id", AppWidgetManager.INVALID_APPWIDGET_ID)) }
     val appWidgetHost = remember { AppWidgetHost(context, 1024) }
-    val widgetPicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == android.app.Activity.RESULT_OK) {
-            val id = result.data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID) ?: AppWidgetManager.INVALID_APPWIDGET_ID
-            if (id != AppWidgetManager.INVALID_APPWIDGET_ID) {
+    val widgetConfigLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val id = pendingWidgetPickId
+        if (id != AppWidgetManager.INVALID_APPWIDGET_ID) {
+            if (result.resultCode == android.app.Activity.RESULT_OK) {
                 widgetId = id
                 prefs.edit().putInt("widget_id", id).apply()
+                widgetMessage = "Widget adicionado à tela inicial."
+            } else {
+                appWidgetHost.deleteAppWidgetId(id)
+                widgetMessage = "Configuração cancelada."
             }
+            pendingWidgetPickId = AppWidgetManager.INVALID_APPWIDGET_ID
+        }
+    }
+    val widgetPicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val id = result.data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
+            ?: AppWidgetManager.INVALID_APPWIDGET_ID
+        if (result.resultCode == android.app.Activity.RESULT_OK && id != AppWidgetManager.INVALID_APPWIDGET_ID) {
+            val info = AppWidgetManager.getInstance(context).getAppWidgetInfo(id)
+            if (info == null) {
+                appWidgetHost.deleteAppWidgetId(id)
+                widgetMessage = "O Android não retornou os dados desse widget. Tente novamente."
+            } else if (info.configure != null) {
+                pendingWidgetPickId = id
+                val configureIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
+                    component = info.configure
+                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+                }
+                widgetConfigLauncher.launch(configureIntent)
+            } else {
+                widgetId = id
+                prefs.edit().putInt("widget_id", id).apply()
+                widgetMessage = "Widget adicionado à tela inicial."
+            }
+        } else {
+            widgetMessage = "Seleção de widget cancelada."
         }
     }
     DisposableEffect(appWidgetHost) {
@@ -309,15 +339,20 @@ fun LauncherScreen() {
             },
             onAddWidget = {
                 val id = appWidgetHost.allocateAppWidgetId()
-                val intent = android.content.Intent(AppWidgetManager.ACTION_APPWIDGET_PICK).apply {
+                pendingWidgetPickId = id
+                widgetMessage = "Escolha um widget na lista do Android."
+                val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_PICK).apply {
                     putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
                 }
                 widgetPicker.launch(intent)
             },
             onRemoveWidget = {
                 if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) appWidgetHost.deleteAppWidgetId(widgetId)
+                if (pendingWidgetPickId != AppWidgetManager.INVALID_APPWIDGET_ID) appWidgetHost.deleteAppWidgetId(pendingWidgetPickId)
+                pendingWidgetPickId = AppWidgetManager.INVALID_APPWIDGET_ID
                 widgetId = AppWidgetManager.INVALID_APPWIDGET_ID
                 prefs.edit().remove("widget_id").apply()
+                widgetMessage = "Widget removido."
             },
             onSetDefaultLauncher = { requestDefaultLauncher(context) },
             onClose = { settingsOpen = false }
@@ -374,14 +409,24 @@ fun LauncherScreen() {
                 )
             }
             if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                AndroidView(
-                    factory = {
-                        val info = AppWidgetManager.getInstance(context).getAppWidgetInfo(widgetId)
-                            ?: throw IllegalStateException("Widget não encontrado")
-                        appWidgetHost.createView(context, widgetId, info)
-                    },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp, max = 220.dp).clip(RoundedCornerShape(18.dp))
-                )
+                key(widgetId) {
+                    AndroidView(
+                        factory = {
+                            val info = AppWidgetManager.getInstance(context).getAppWidgetInfo(widgetId)
+                            if (info != null) {
+                                appWidgetHost.createView(context, widgetId, info).also { it.setAppWidget(widgetId, info) }
+                            } else {
+                                android.widget.TextView(context).apply {
+                                    text = "Widget indisponível. Remova e adicione novamente nas configurações."
+                                    setTextColor(android.graphics.Color.WHITE)
+                                    setPadding(20, 20, 20, 20)
+                                    setBackgroundColor(android.graphics.Color.DKGRAY)
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp, max = 260.dp).clip(RoundedCornerShape(18.dp))
+                    )
+                }
                 Spacer(Modifier.height(10.dp))
             }
             Spacer(Modifier.height(if (compactMode) 12.dp else 18.dp))
