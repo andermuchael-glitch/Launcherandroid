@@ -150,8 +150,13 @@ fun LauncherScreen() {
                 widgetId = id
                 prefs.edit().putInt("widget_id", id).apply()
                 widgetMessage = "Widget adicionado à tela inicial."
+                pendingWidgetPickId = AppWidgetManager.INVALID_APPWIDGET_ID
             }
         } else {
+            if (pendingWidgetPickId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                appWidgetHost.deleteAppWidgetId(pendingWidgetPickId)
+                pendingWidgetPickId = AppWidgetManager.INVALID_APPWIDGET_ID
+            }
             widgetMessage = "Seleção de widget cancelada."
         }
     }
@@ -598,7 +603,7 @@ private fun MinimalFavoriteItem(
                 Image(
                     bitmap = iconBitmap,
                     contentDescription = app.label,
-                    modifier = Modifier.size(29.dp)
+                    modifier = Modifier.size(29.dp).clip(iconShape(iconStyle))
                 )
             }
         }
@@ -1385,7 +1390,7 @@ private fun NiagaraAppRow(app: AppInfo, isFavorite: Boolean, iconStyle: String, 
             color = accent.copy(alpha = 0.14f)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Image(bitmap = iconBitmap, contentDescription = app.label, modifier = Modifier.size(27.dp))
+                Image(bitmap = iconBitmap, contentDescription = app.label, modifier = Modifier.size(27.dp).clip(iconShape(iconStyle)))
             }
         }
         Spacer(Modifier.width(12.dp))
