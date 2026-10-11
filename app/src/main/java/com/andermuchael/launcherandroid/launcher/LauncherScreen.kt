@@ -112,7 +112,10 @@ fun LauncherScreen() {
     var themeName by remember { mutableStateOf(prefs.getString("launcher_theme", "Midnight") ?: "Midnight") }
     var iconStyle by remember { mutableStateOf(prefs.getString("icon_style", "Arredondado") ?: "Arredondado") }
     var widgetMessage by remember { mutableStateOf<String?>(null) }
+    var widgetProviderDialog by remember { mutableStateOf(false) }
+    var availableWidgetProviders by remember { mutableStateOf(emptyList<android.appwidget.AppWidgetProviderInfo>()) }
     var pendingWidgetPickId by remember { mutableIntStateOf(AppWidgetManager.INVALID_APPWIDGET_ID) }
+    var pendingWidgetProvider by remember { mutableStateOf<android.content.ComponentName?>(null) }
     var memoryMessage by remember { mutableStateOf<String?>(null) }
     var wallpaperUri by remember { mutableStateOf(prefs.getString("wallpaper_uri", null)) }
     var widgetId by remember { mutableStateOf(prefs.getInt("widget_id", AppWidgetManager.INVALID_APPWIDGET_ID)) }
@@ -126,38 +129,46 @@ fun LauncherScreen() {
                 widgetMessage = "Widget adicionado à tela inicial."
             } else {
                 appWidgetHost.deleteAppWidgetId(id)
-                widgetMessage = "Configuração cancelada."
+                widgetMessage = "Configuração cancelada; widget não adicionado."
             }
             pendingWidgetPickId = AppWidgetManager.INVALID_APPWIDGET_ID
+            pendingWidgetProvider = null
         }
     }
-    val widgetPicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        val id = result.data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
-            ?: AppWidgetManager.INVALID_APPWIDGET_ID
+    val configureBoundWidget: (Int, android.appwidget.AppWidgetProviderInfo) -> Unit = { id, info ->
+        if (info.configure != null) {
+            pendingWidgetPickId = id
+            val configureIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
+                component = info.configure
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+            }
+            widgetConfigLauncher.launch(configureIntent)
+        } else {
+            widgetId = id
+            prefs.edit().putInt("widget_id", id).apply()
+            widgetMessage = "Widget adicionado à tela inicial."
+            pendingWidgetPickId = AppWidgetManager.INVALID_APPWIDGET_ID
+            pendingWidgetProvider = null
+        }
+    }
+    val widgetBindLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val id = pendingWidgetPickId
+        val provider = pendingWidgetProvider
         if (result.resultCode == android.app.Activity.RESULT_OK && id != AppWidgetManager.INVALID_APPWIDGET_ID) {
             val info = AppWidgetManager.getInstance(context).getAppWidgetInfo(id)
-            if (info == null) {
+                ?: availableWidgetProviders.firstOrNull { it.provider == provider }
+            if (info != null) configureBoundWidget(id, info)
+            else {
                 appWidgetHost.deleteAppWidgetId(id)
-                widgetMessage = "O Android não retornou os dados desse widget. Tente novamente."
-            } else if (info.configure != null) {
-                pendingWidgetPickId = id
-                val configureIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
-                    component = info.configure
-                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
-                }
-                widgetConfigLauncher.launch(configureIntent)
-            } else {
-                widgetId = id
-                prefs.edit().putInt("widget_id", id).apply()
-                widgetMessage = "Widget adicionado à tela inicial."
                 pendingWidgetPickId = AppWidgetManager.INVALID_APPWIDGET_ID
+                pendingWidgetProvider = null
+                widgetMessage = "O Android não confirmou a vinculação do widget."
             }
         } else {
-            if (pendingWidgetPickId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                appWidgetHost.deleteAppWidgetId(pendingWidgetPickId)
-                pendingWidgetPickId = AppWidgetManager.INVALID_APPWIDGET_ID
-            }
-            widgetMessage = "Seleção de widget cancelada."
+            if (id != AppWidgetManager.INVALID_APPWIDGET_ID) appWidgetHost.deleteAppWidgetId(id)
+            pendingWidgetPickId = AppWidgetManager.INVALID_APPWIDGET_ID
+            pendingWidgetProvider = null
+            widgetMessage = "Permissão para adicionar o widget não concedida."
         }
     }
     DisposableEffect(appWidgetHost) {
@@ -271,6 +282,55 @@ fun LauncherScreen() {
         FolderEditorDialog(apps = apps, initial = selectedFolder, onDismiss = { folderDialog = false; selectedFolder = null }, onSave = { folder -> folders = upsertFolder(prefs, folders, folder); folderDialog = false; selectedFolder = null }, onDelete = { folder -> folders = folders.filterNot { it.id == folder.id }; saveFolders(prefs, folders); folderDialog = false; selectedFolder = null })
     }
 
+    if (widgetProviderDialog) {
+        AlertDialog(
+            onDismissRequest = { widgetProviderDialog = false },
+            title = { Text("Escolher widget") },
+            text = {
+                LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
+                    items(availableWidgetProviders, key = { it.provider.flattenToString() }) { providerInfo ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    widgetProviderDialog = false
+                                    val manager = AppWidgetManager.getInstance(context)
+                                    val id = appWidgetHost.allocateAppWidgetId()
+                                    pendingWidgetPickId = id
+                                    pendingWidgetProvider = providerInfo.provider
+                                    val bound = runCatching {
+                                        manager.bindAppWidgetIdIfAllowed(id, providerInfo.provider)
+                                    }.getOrDefault(false)
+                                    if (bound) {
+                                        configureBoundWidget(id, providerInfo)
+                                    } else {
+                                        val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
+                                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+                                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, providerInfo.provider)
+                                        }
+                                        widgetBindLauncher.launch(bindIntent)
+                                    }
+                                }
+                                .padding(horizontal = 8.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val icon = runCatching { providerInfo.loadIcon(context, 48) }.getOrNull()
+                            if (icon != null) {
+                                AndroidView(factory = { android.widget.ImageView(it).apply { setImageDrawable(icon); scaleType = android.widget.ImageView.ScaleType.FIT_CENTER } },
+                                    modifier = Modifier.size(38.dp))
+                                Spacer(Modifier.width(12.dp))
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(providerInfo.loadLabel(context.packageManager).toString(), fontWeight = FontWeight.Medium)
+                                Text(providerInfo.provider.packageName, style = MaterialTheme.typography.labelSmall, color = Color.Gray, maxLines = 1)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { widgetProviderDialog = false }) { Text("Fechar") } }
+        )
+    }
+
     if (settingsOpen) {
         LauncherSettings(
             showDate = showDate,
@@ -343,13 +403,15 @@ fun LauncherScreen() {
                 }
             },
             onAddWidget = {
-                val id = appWidgetHost.allocateAppWidgetId()
-                pendingWidgetPickId = id
-                widgetMessage = "Escolha um widget na lista do Android."
-                val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_PICK).apply {
-                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+                availableWidgetProviders = AppWidgetManager.getInstance(context).installedProviders
+                    .filter { it.provider.packageName != context.packageName }
+                    .sortedBy { it.loadLabel(context.packageManager).toString().lowercase() }
+                if (availableWidgetProviders.isEmpty()) {
+                    widgetMessage = "Nenhum widget instalado foi encontrado no perfil atual."
+                } else {
+                    widgetProviderDialog = true
+                    widgetMessage = "Escolha um widget instalado no celular."
                 }
-                widgetPicker.launch(intent)
             },
             onRemoveWidget = {
                 if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) appWidgetHost.deleteAppWidgetId(widgetId)
@@ -357,6 +419,7 @@ fun LauncherScreen() {
                 pendingWidgetPickId = AppWidgetManager.INVALID_APPWIDGET_ID
                 widgetId = AppWidgetManager.INVALID_APPWIDGET_ID
                 prefs.edit().remove("widget_id").apply()
+                pendingWidgetProvider = null
                 widgetMessage = "Widget removido."
             },
             onSetDefaultLauncher = { requestDefaultLauncher(context) },
@@ -1701,7 +1764,25 @@ private fun openAppInfo(context: Context, packageName: String) {
 }
 
 private fun uninstallApp(context: Context, packageName: String) {
-    context.startActivity(Intent(Intent.ACTION_DELETE).apply { data = Uri.parse("package:$packageName") })
+    val deleteIntent = Intent(Intent.ACTION_DELETE, Uri.parse("package:$packageName")).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    val infoIntent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    try {
+        if (deleteIntent.resolveActivity(context.packageManager) != null) {
+            context.startActivity(deleteIntent)
+        } else if (infoIntent.resolveActivity(context.packageManager) != null) {
+            context.startActivity(infoIntent)
+            android.widget.Toast.makeText(context, "Abra as informações do aplicativo e toque em Desinstalar.", android.widget.Toast.LENGTH_LONG).show()
+        } else {
+            android.widget.Toast.makeText(context, "O Android não disponibilizou a tela de desinstalação para este aplicativo.", android.widget.Toast.LENGTH_LONG).show()
+        }
+    } catch (_: Exception) {
+        runCatching { context.startActivity(infoIntent) }
+            .onFailure { android.widget.Toast.makeText(context, "Não foi possível abrir a tela do aplicativo.", android.widget.Toast.LENGTH_LONG).show() }
+    }
 }
 private fun downloadAndApplyWallpaper(context: Context, option: WallpaperOption, onFinished: (Uri?, String?) -> Unit) {
     kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
