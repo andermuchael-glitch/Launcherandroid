@@ -109,6 +109,9 @@ fun LauncherScreen() {
     var iconSize by remember { mutableFloatStateOf(prefs.getFloat("icon_size", 48f)) }
     var clockSize by remember { mutableFloatStateOf(prefs.getFloat("clock_size", 78f)) }
     var wallpaperDim by remember { mutableFloatStateOf(prefs.getFloat("wallpaper_dim", 0.38f)) }
+    var themeName by remember { mutableStateOf(prefs.getString("launcher_theme", "Midnight") ?: "Midnight") }
+    var iconStyle by remember { mutableStateOf(prefs.getString("icon_style", "Arredondado") ?: "Arredondado") }
+    var widgetMessage by remember { mutableStateOf<String?>(null) }
     var memoryMessage by remember { mutableStateOf<String?>(null) }
     var wallpaperUri by remember { mutableStateOf(prefs.getString("wallpaper_uri", null)) }
     var widgetId by remember { mutableStateOf(prefs.getInt("widget_id", AppWidgetManager.INVALID_APPWIDGET_ID)) }
@@ -242,6 +245,9 @@ fun LauncherScreen() {
             widgetId = widgetId,
             iconSize = iconSize,
             clockSize = clockSize,
+            themeName = themeName,
+            iconStyle = iconStyle,
+            widgetMessage = widgetMessage,
             wallpaperDim = wallpaperDim,
             memoryMessage = memoryMessage,
             hasWallpaper = wallpaperBitmap != null,
@@ -263,6 +269,8 @@ fun LauncherScreen() {
             },
             onIconSize = { iconSize = it; prefs.edit().putFloat("icon_size", it).apply() },
             onClockSize = { clockSize = it; prefs.edit().putFloat("clock_size", it).apply() },
+            onThemeChange = { themeName = it; prefs.edit().putString("launcher_theme", it).apply() },
+            onIconStyleChange = { iconStyle = it; prefs.edit().putString("icon_style", it).apply() },
             onWallpaperDim = { wallpaperDim = it; prefs.edit().putFloat("wallpaper_dim", it).apply() },
             onOptimizeMemory = { memoryMessage = optimizeLauncherMemory(context) },
             onShowDate = { showDate = it; context.getSharedPreferences("launcher", 0).edit().putBoolean("show_date", it).apply() },
@@ -321,6 +329,8 @@ fun LauncherScreen() {
         AppDrawer(
             apps = filteredApps,
             query = query,
+            themeName = themeName,
+            iconStyle = iconStyle,
             onQueryChange = { query = it },
             favorites = favorites.toSet(),
             onToggleFavorite = { app -> favorites = toggleFavorite(context, favorites, app.packageName) },
@@ -334,7 +344,7 @@ fun LauncherScreen() {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(launcherBackground())
+            .background(launcherBackground(themeName))
             .pointerInput(Unit) {
                 detectVerticalDragGestures { _, dragAmount ->
                     if (dragAmount < -24f) drawerOpen = true
@@ -470,6 +480,7 @@ fun LauncherScreen() {
                     MinimalFavoriteItem(
                         app = app,
                         iconSize = iconSize,
+                        iconStyle = iconStyle,
                         onClick = { openApp(context, app.packageName) },
                         onLongPress = { longPressApp = app }
                     )
@@ -518,6 +529,7 @@ fun LauncherScreen() {
 private fun MinimalFavoriteItem(
     app: AppInfo,
     iconSize: Float,
+    iconStyle: String,
     onClick: () -> Unit,
     onLongPress: () -> Unit
 ) {
@@ -533,7 +545,7 @@ private fun MinimalFavoriteItem(
     ) {
         Surface(
             modifier = Modifier.size(38.dp),
-            shape = RoundedCornerShape(12.dp),
+            shape = iconShape(iconStyle),
             color = Color.White.copy(alpha = 0.10f),
             tonalElevation = 2.dp
         ) {
@@ -794,6 +806,9 @@ private fun LauncherSettings(
     widgetId: Int,
     iconSize: Float,
     clockSize: Float,
+    themeName: String,
+    iconStyle: String,
+    widgetMessage: String?,
     wallpaperDim: Float,
     memoryMessage: String?,
     hasWallpaper: Boolean,
@@ -804,6 +819,8 @@ private fun LauncherSettings(
     onRemoveWallpaper: () -> Unit,
     onIconSize: (Float) -> Unit,
     onClockSize: (Float) -> Unit,
+    onThemeChange: (String) -> Unit,
+    onIconStyleChange: (String) -> Unit,
     onWallpaperDim: (Float) -> Unit,
     onOptimizeMemory: () -> Unit,
     onShowDate: (Boolean) -> Unit,
@@ -819,7 +836,7 @@ private fun LauncherSettings(
     onClose: () -> Unit
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().background(Color(0xFF0D1420))
+        modifier = Modifier.fillMaxSize().background(themeBackgroundColor(themeName))
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onClose) {
@@ -884,6 +901,37 @@ private fun LauncherSettings(
         Spacer(Modifier.height(24.dp))
         Text("Personalização", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
+        Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = Color.White.copy(alpha = 0.08f)) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Temas visuais", color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text("Altere as cores da tela inicial e da gaveta.", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(8.dp))
+                listOf("Midnight", "Oceano", "Floresta", "Ametista", "Âmbar", "Preto AMOLED").forEach { theme ->
+                    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { onThemeChange(theme) }.padding(vertical = 7.dp, horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Surface(modifier = Modifier.size(26.dp), shape = CircleShape, color = themeAccent(theme)) {}
+                        Spacer(Modifier.width(12.dp))
+                        Text(theme, color = Color.White, modifier = Modifier.weight(1f))
+                        RadioButton(selected = themeName == theme, onClick = { onThemeChange(theme) })
+                    }
+                }
+                HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                Spacer(Modifier.height(10.dp))
+                Text("Formato dos ícones", color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text("Personalize a moldura dos ícones dos aplicativos.", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    listOf("Arredondado", "Circular", "Quadrado").forEach { style ->
+                        Column(modifier = Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable { onIconStyleChange(style) }.padding(5.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Surface(modifier = Modifier.size(36.dp), shape = iconShape(style), color = themeAccent(themeName).copy(alpha = if (iconStyle == style) 0.95f else 0.35f)) {
+                                Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Apps, contentDescription = null, tint = Color.White) }
+                            }
+                            Text(style, color = Color.White.copy(alpha = if (iconStyle == style) 1f else 0.65f), style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
         Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = Color.White.copy(alpha = 0.08f)) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Papel de parede", color = Color.White, fontWeight = FontWeight.SemiBold)
@@ -953,7 +1001,13 @@ private fun LauncherSettings(
         Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = Color.White.copy(alpha = 0.08f)) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Widgets sobre a tela inicial", color = Color.White, fontWeight = FontWeight.SemiBold)
-                Text("Adicione um widget do Android diretamente à tela inicial.", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall)
+                Text("Adicione widgets do Android à tela inicial. Alguns precisam de configuração no próprio aplicativo.", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall)
+                if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                    val ctx = LocalContext.current
+                    val widgetInfo = AppWidgetManager.getInstance(ctx).getAppWidgetInfo(widgetId)
+                    Text("Widget ativo: " + (widgetInfo?.loadLabel(ctx.packageManager) ?: "indisponível"), color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall)
+                }
+                widgetMessage?.let { Text(it, color = themeAccent(themeName), style = MaterialTheme.typography.bodySmall) }
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = onAddWidget, modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)) { Text("Adicionar widget") }
@@ -1016,8 +1070,38 @@ private fun optimizeLauncherMemory(context: Context): String {
     }.getOrElse { "Não foi possível otimizar a memória agora." }
 }
 
-private fun launcherBackground(): Brush =
-    Brush.verticalGradient(listOf(Color(0xFF080B10), Color(0xFF10151D), Color(0xFF06080C)))
+private fun launcherBackground(themeName: String): Brush = when (themeName) {
+    "Oceano" -> Brush.verticalGradient(listOf(Color(0xFF031D32), Color(0xFF07516A), Color(0xFF04101E)))
+    "Floresta" -> Brush.verticalGradient(listOf(Color(0xFF071D16), Color(0xFF164936), Color(0xFF030B08)))
+    "Ametista" -> Brush.verticalGradient(listOf(Color(0xFF180E2C), Color(0xFF3D2366), Color(0xFF0B0714)))
+    "Âmbar" -> Brush.verticalGradient(listOf(Color(0xFF251407), Color(0xFF603411), Color(0xFF100904)))
+    "Preto AMOLED" -> Brush.verticalGradient(listOf(Color.Black, Color.Black, Color.Black))
+    else -> Brush.verticalGradient(listOf(Color(0xFF080B10), Color(0xFF10151D), Color(0xFF06080C)))
+}
+
+private fun themeBackgroundColor(themeName: String): Color = when (themeName) {
+    "Oceano" -> Color(0xFF041927)
+    "Floresta" -> Color(0xFF071B13)
+    "Ametista" -> Color(0xFF170D27)
+    "Âmbar" -> Color(0xFF211206)
+    "Preto AMOLED" -> Color.Black
+    else -> Color(0xFF0D1420)
+}
+
+private fun themeAccent(themeName: String): Color = when (themeName) {
+    "Oceano" -> Color(0xFF39D7F2)
+    "Floresta" -> Color(0xFF66E3A0)
+    "Ametista" -> Color(0xFFC7A1FF)
+    "Âmbar" -> Color(0xFFFFC15C)
+    "Preto AMOLED" -> Color(0xFF73D6FF)
+    else -> Color(0xFF7AB8FF)
+}
+
+private fun iconShape(style: String): androidx.compose.ui.graphics.Shape = when (style) {
+    "Circular" -> CircleShape
+    "Quadrado" -> RoundedCornerShape(3.dp)
+    else -> RoundedCornerShape(12.dp)
+}
 
 @Composable
 private fun SettingSwitch(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
@@ -1035,7 +1119,7 @@ private fun SettingSwitch(title: String, subtitle: String, checked: Boolean, onC
 
 @Composable
 private fun AppDrawer(
-    apps: List<AppInfo>, query: String, onQueryChange: (String) -> Unit, favorites: Set<String>,
+    apps: List<AppInfo>, query: String, themeName: String, iconStyle: String, onQueryChange: (String) -> Unit, favorites: Set<String>,
     onToggleFavorite: (AppInfo) -> Unit, onOpen: (AppInfo) -> Unit, onLongPress: (AppInfo) -> Unit, onClose: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -1073,7 +1157,7 @@ private fun AppDrawer(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0D1420))
+            .background(themeBackgroundColor(themeName))
             .padding(horizontal = 18.dp, vertical = 16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1172,6 +1256,8 @@ private fun AppDrawer(
                                 NiagaraAppRow(
                                     app = row.app,
                                     isFavorite = row.app.packageName in favorites,
+                                    iconStyle = iconStyle,
+                                    accent = themeAccent(themeName),
                                     onClick = { onOpen(row.app) },
                                     onLongPress = { onLongPress(row.app) }
                                 )
@@ -1239,7 +1325,7 @@ private sealed interface DrawerRow {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun NiagaraAppRow(app: AppInfo, isFavorite: Boolean, onClick: () -> Unit, onLongPress: () -> Unit) {
+private fun NiagaraAppRow(app: AppInfo, isFavorite: Boolean, iconStyle: String, accent: Color, onClick: () -> Unit, onLongPress: () -> Unit) {
     val iconBitmap = remember(app.packageName) { app.icon.toBitmap(96, 96).asImageBitmap() }
     Row(
         modifier = Modifier.fillMaxWidth().height(48.dp)
@@ -1250,8 +1336,8 @@ private fun NiagaraAppRow(app: AppInfo, isFavorite: Boolean, onClick: () -> Unit
     ) {
         Surface(
             modifier = Modifier.size(36.dp),
-            shape = RoundedCornerShape(11.dp),
-            color = Color.White.copy(alpha = 0.09f)
+            shape = iconShape(iconStyle),
+            color = accent.copy(alpha = 0.14f)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Image(bitmap = iconBitmap, contentDescription = app.label, modifier = Modifier.size(27.dp))
