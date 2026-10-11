@@ -371,6 +371,7 @@ fun LauncherScreen() {
             query = query,
             themeName = themeName,
             iconStyle = iconStyle,
+            iconSize = iconSize,
             onQueryChange = { query = it },
             favorites = favorites.toSet(),
             onToggleFavorite = { app -> favorites = toggleFavorite(context, favorites, app.packageName) },
@@ -587,14 +588,14 @@ private fun MinimalFavoriteItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(50.dp)
+            .height(maxOf(50f, iconSize + 10f).dp)
             .clip(RoundedCornerShape(14.dp))
             .combinedClickable(onClick = onClick, onLongClick = onLongPress)
             .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Surface(
-            modifier = Modifier.size(38.dp),
+            modifier = Modifier.size(iconSize.coerceIn(32f, 46f).dp),
             shape = iconShape(iconStyle),
             color = Color.White.copy(alpha = 0.10f),
             tonalElevation = 2.dp
@@ -603,7 +604,7 @@ private fun MinimalFavoriteItem(
                 Image(
                     bitmap = iconBitmap,
                     contentDescription = app.label,
-                    modifier = Modifier.size(29.dp).clip(iconShape(iconStyle))
+                    modifier = Modifier.size((iconSize * 0.76f).coerceIn(24f, 36f).dp).clip(iconShape(iconStyle))
                 )
             }
         }
@@ -1034,7 +1035,8 @@ private fun LauncherSettings(
                 Spacer(Modifier.height(8.dp))
                 Text("Ajuste o tamanho sem aplicar temas.", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(8.dp))
-                Slider(value = iconSize, onValueChange = onIconSize, valueRange = 36f..52f, steps = 7)
+                Text("Tamanho do ícone: " + iconSize.roundToInt().toString() + " dp", color = Color.White.copy(alpha = 0.65f), style = MaterialTheme.typography.bodySmall)
+                Slider(value = iconSize, onValueChange = onIconSize, valueRange = 32f..46f, steps = 6)
                 Spacer(Modifier.height(10.dp))
                 Text("Tamanho do relógio", color = Color.White, fontWeight = FontWeight.Medium)
                 Text(clockSize.roundToInt().toString() + " dp", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.bodySmall)
@@ -1169,7 +1171,7 @@ private fun SettingSwitch(title: String, subtitle: String, checked: Boolean, onC
 
 @Composable
 private fun AppDrawer(
-    apps: List<AppInfo>, query: String, themeName: String, iconStyle: String, onQueryChange: (String) -> Unit, favorites: Set<String>,
+    apps: List<AppInfo>, query: String, themeName: String, iconStyle: String, iconSize: Float, onQueryChange: (String) -> Unit, favorites: Set<String>,
     onToggleFavorite: (AppInfo) -> Unit, onOpen: (AppInfo) -> Unit, onLongPress: (AppInfo) -> Unit, onClose: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -1307,6 +1309,7 @@ private fun AppDrawer(
                                     app = row.app,
                                     isFavorite = row.app.packageName in favorites,
                                     iconStyle = iconStyle,
+                                    iconSize = iconSize,
                                     accent = themeAccent(themeName),
                                     onClick = { onOpen(row.app) },
                                     onLongPress = { onLongPress(row.app) }
@@ -1375,22 +1378,22 @@ private sealed interface DrawerRow {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun NiagaraAppRow(app: AppInfo, isFavorite: Boolean, iconStyle: String, accent: Color, onClick: () -> Unit, onLongPress: () -> Unit) {
+private fun NiagaraAppRow(app: AppInfo, isFavorite: Boolean, iconStyle: String, iconSize: Float, accent: Color, onClick: () -> Unit, onLongPress: () -> Unit) {
     val iconBitmap = remember(app.packageName) { app.icon.toBitmap(96, 96).asImageBitmap() }
     Row(
-        modifier = Modifier.fillMaxWidth().height(48.dp)
+        modifier = Modifier.fillMaxWidth().height(maxOf(48f, iconSize + 4f).dp)
             .clip(RoundedCornerShape(14.dp))
             .combinedClickable(onClick = onClick, onLongClick = onLongPress)
             .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Surface(
-            modifier = Modifier.size(36.dp),
+            modifier = Modifier.size(iconSize.coerceIn(32f, 46f).dp),
             shape = iconShape(iconStyle),
             color = accent.copy(alpha = 0.14f)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Image(bitmap = iconBitmap, contentDescription = app.label, modifier = Modifier.size(27.dp).clip(iconShape(iconStyle)))
+                Image(bitmap = iconBitmap, contentDescription = app.label, modifier = Modifier.size((iconSize * 0.76f).coerceIn(24f, 36f).dp).clip(iconShape(iconStyle)))
             }
         }
         Spacer(Modifier.width(12.dp))
