@@ -169,8 +169,17 @@ fun LauncherScreen() {
         }
     }
 
-    val filteredApps = apps.filter { query.isBlank() || it.label.contains(query, ignoreCase = true) }
-    val favoriteApps = favorites.mapNotNull { pkg -> apps.find { it.packageName == pkg } }
+    // Evita refazer filtros e buscas na lista de apps a cada atualização do relógio.
+    // A tela principal atualiza o horário a cada segundo; estes cálculos só mudam
+    // quando a lista de apps, a busca ou os favoritos realmente mudam.
+    val filteredApps = remember(apps, query) {
+        if (query.isBlank()) apps
+        else apps.filter { it.label.contains(query, ignoreCase = true) }
+    }
+    val appsByPackage = remember(apps) { apps.associateBy { it.packageName } }
+    val favoriteApps = remember(favorites, appsByPackage) {
+        favorites.mapNotNull { pkg -> appsByPackage[pkg] }
+    }
 
     val weather by produceState<WeatherData?>(initialValue = cachedWeather(weatherCity), key1 = weatherCity) {
         if (weatherCity.isBlank()) {
