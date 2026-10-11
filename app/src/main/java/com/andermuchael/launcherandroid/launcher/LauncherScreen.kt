@@ -521,24 +521,38 @@ private fun MinimalFavoriteItem(
     onClick: () -> Unit,
     onLongPress: () -> Unit
 ) {
+    val iconBitmap = remember(app.packageName) { app.icon.toBitmap(96, 96).asImageBitmap() }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(46.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongPress
-            )
+            .height(50.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .combinedClickable(onClick = onClick, onLongClick = onLongPress)
             .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        Surface(
+            modifier = Modifier.size(38.dp),
+            shape = RoundedCornerShape(12.dp),
+            color = Color.White.copy(alpha = 0.10f),
+            tonalElevation = 2.dp
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Image(
+                    bitmap = iconBitmap,
+                    contentDescription = app.label,
+                    modifier = Modifier.size(29.dp)
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
         Text(
             app.label,
-            color = Color.White.copy(alpha = 0.92f),
+            color = Color.White.copy(alpha = 0.94f),
             style = MaterialTheme.typography.bodyLarge.copy(
-                fontFamily = FontFamily.Serif,
-                fontSize = 17.sp
+                fontFamily = FontFamily.SansSerif,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium
             ),
             maxLines = 1
         )
@@ -1226,9 +1240,34 @@ private sealed interface DrawerRow {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun NiagaraAppRow(app: AppInfo, isFavorite: Boolean, onClick: () -> Unit, onLongPress: () -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth().height(46.dp).clip(RoundedCornerShape(12.dp)).combinedClickable(onClick = onClick, onLongClick = onLongPress).padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(app.label, color = Color.White.copy(alpha = 0.90f), style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Serif, fontSize = 16.sp), maxLines = 1, modifier = Modifier.weight(1f))
-        if (isFavorite) Text("•", color = Color.White.copy(alpha = 0.35f), fontSize = 18.sp)
+    val iconBitmap = remember(app.packageName) { app.icon.toBitmap(96, 96).asImageBitmap() }
+    Row(
+        modifier = Modifier.fillMaxWidth().height(48.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .combinedClickable(onClick = onClick, onLongClick = onLongPress)
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(
+            modifier = Modifier.size(36.dp),
+            shape = RoundedCornerShape(11.dp),
+            color = Color.White.copy(alpha = 0.09f)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Image(bitmap = iconBitmap, contentDescription = app.label, modifier = Modifier.size(27.dp))
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(
+            app.label,
+            color = Color.White.copy(alpha = 0.92f),
+            style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.SansSerif, fontSize = 15.sp, fontWeight = FontWeight.Medium),
+            maxLines = 1,
+            modifier = Modifier.weight(1f)
+        )
+        if (isFavorite) {
+            Surface(modifier = Modifier.size(6.dp), shape = CircleShape, color = Color(0xFF8ED8B2)) {}
+        }
     }
 }
 @Composable
