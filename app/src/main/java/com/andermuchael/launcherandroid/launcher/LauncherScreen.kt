@@ -264,12 +264,12 @@ fun LauncherScreen() {
 
     var weather by remember(weatherCity) { mutableStateOf(cachedWeather(weatherCity)) }
     var weatherRefreshing by remember { mutableStateOf(false) }
-    var weatherUpdatedAt by remember(weatherCity) { mutableStateOf<Long?>(null) }
+    var weatherUpdatedAt by remember(weatherCity) { mutableStateOf<Long?>(if (cachedWeather(weatherCity) != null) System.currentTimeMillis() else null) }
     val weatherScope = rememberCoroutineScope()
 
     LaunchedEffect(weatherCity) {
         weather = cachedWeather(weatherCity)
-        weatherUpdatedAt = null
+        weatherUpdatedAt = if (weather != null) System.currentTimeMillis() else null
         if (weatherCity.isBlank()) {
             weather = null
         } else {
@@ -636,8 +636,6 @@ fun LauncherScreen() {
                     )
                 }
             }
-
-            Spacer(Modifier.height(8.dp))
 
             Spacer(Modifier.height(8.dp))
             Surface(
