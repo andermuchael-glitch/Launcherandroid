@@ -47,6 +47,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.MoreVert
@@ -234,8 +235,17 @@ fun LauncherScreen() {
     val homeListState = androidx.compose.foundation.lazy.rememberLazyListState()
     val homeScope = rememberCoroutineScope()
     val homeAlphabet = remember { ('A'..'Z').map { it.toString() } + "#" }
-    val homeGroupedApps = remember(filteredApps) {
-        filteredApps.groupBy { it.label.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "#" }
+    val appsByPackage = remember(apps) { apps.associateBy { it.packageName } }
+    val favoriteApps = remember(favorites, appsByPackage) {
+        favorites.mapNotNull { pkg -> appsByPackage[pkg] }
+            .sortedBy { it.label.lowercase(Locale.getDefault()) }
+    }
+    // Home mostra apenas favoritos; ao pesquisar, permite localizar qualquer app instalado.
+    val visibleHomeApps = remember(favoriteApps, filteredApps, query) {
+        if (query.isBlank()) favoriteApps else filteredApps
+    }
+    val homeGroupedApps = remember(visibleHomeApps) {
+        visibleHomeApps.groupBy { it.label.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "#" }
             .toSortedMap(compareBy { if (it == "#") "{" else it })
     }
     val homeRows = remember(homeGroupedApps) {
@@ -251,22 +261,48 @@ fun LauncherScreen() {
             if (row is DrawerRow.Header) row.letter to index else null
         }.toMap()
     }
-    val appsByPackage = remember(apps) { apps.associateBy { it.packageName } }
-    val favoriteApps = remember(favorites, appsByPackage) {
-        favorites.mapNotNull { pkg -> appsByPackage[pkg] }
-    }
 
-    val weather by produceState<WeatherData?>(initialValue = cachedWeather(weatherCity), key1 = weatherCity) {
+    var weather by remember(weatherCity) { mutableStateOf(cachedWeather(weatherCity)) }
+    var weatherRefreshing by remember { mutableStateOf(false) }
+    var weatherUpdatedAt by remember(weatherCity) { mutableStateOf<Long?>(null) }
+    val weatherScope = rememberCoroutineScope()
+
+    LaunchedEffect(weatherCity) {
+        weather = cachedWeather(weatherCity)
+        weatherUpdatedAt = null
         if (weatherCity.isBlank()) {
-            value = null
+            weather = null
         } else {
-            if (value == null) {
-                value = withContext(Dispatchers.IO) { fetchWeather(weatherCity) }
+            if (weather == null) {
+                val firstLoad = withContext(Dispatchers.IO) { fetchWeather(weatherCity) }
+                if (firstLoad != null) {
+                    weather = firstLoad
+                    weatherUpdatedAt = System.currentTimeMillis()
+                }
             }
             while (true) {
-                delay(60 * 60 * 1000L)
-                val refreshed = withContext(Dispatchers.IO) { fetchWeather(weatherCity) }
-                if (refreshed != null) value = refreshed
+                delay(3 * 60 * 60 * 1000L)
+                val refreshed = withContext(Dispatchers.IO) { fetchWeather(weatherCity, forceRefresh = true) }
+                if (refreshed != null) {
+                    weather = refreshed
+                    weatherUpdatedAt = System.currentTimeMillis()
+                }
+            }
+        }
+    }
+
+    val refreshWeather: () -> Unit = {
+        if (weatherCity.isNotBlank() && !weatherRefreshing) {
+            weatherScope.launch {
+                weatherRefreshing = true
+                val refreshed = withContext(Dispatchers.IO) {
+                    fetchWeather(weatherCity, forceRefresh = true)
+                }
+                if (refreshed != null) {
+                    weather = refreshed
+                    weatherUpdatedAt = System.currentTimeMillis()
+                }
+                weatherRefreshing = false
             }
         }
     }
@@ -499,10 +535,16 @@ fun LauncherScreen() {
                     CompactClockAndDate(showDate = showDate, onAlarm = { openAlarm(context) })
                     if (weatherCity.isNotBlank()) {
                         Spacer(Modifier.height(2.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { weatherExpanded = !weatherExpanded }
+                                .padding(end = 8.dp, top = 2.dp, bottom = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
                                 weather?.let { weatherDescription(it.code) } ?: "Clima de $weatherCity",
-                                color = Color.White.copy(alpha = 0.78f),
+                                color = Color.White.copy(alpha = 0.86f),
                                 style = MaterialTheme.typography.labelMedium,
                                 maxLines = 1
                             )
@@ -513,11 +555,66 @@ fun LauncherScreen() {
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold
                             )
+                            Spacer(Modifier.width(5.dp))
+                            Text(if (weatherExpanded) "⌃" else "⌄", color = Color.White.copy(alpha = 0.75f), fontSize = 16.sp)
                         }
                     }
                 }
                 IconButton(onClick = { settingsOpen = true }) {
                     Icon(Icons.Default.Settings, contentDescription = "Configurar", tint = Color.White.copy(alpha = 0.82f))
+                }
+            }
+
+            if (weatherExpanded && weatherCity.isNotBlank()) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 6.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color.Black.copy(alpha = 0.34f)
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Previsão por hora", color = Color.White, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
+                                Text(
+                                    weatherUpdatedAt?.let { "Atualizada às ${SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(it))}" } ?: "Atualiza automaticamente a cada 3 horas",
+                                    color = Color.White.copy(alpha = 0.62f),
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                            IconButton(
+                                onClick = refreshWeather,
+                                enabled = !weatherRefreshing,
+                                modifier = Modifier.size(38.dp)
+                            ) {
+                                if (weatherRefreshing) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
+                                } else {
+                                    Icon(Icons.Default.Refresh, contentDescription = "Atualizar previsão", tint = Color.White)
+                                }
+                            }
+                        }
+                        if (weather?.hours.isNullOrEmpty()) {
+                            Text("Previsão horária indisponível. Toque em atualizar.", color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.bodySmall)
+                        } else {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(weather!!.hours, key = { it.time }) { hour ->
+                                    Column(
+                                        modifier = Modifier
+                                            .width(58.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(Color.White.copy(alpha = 0.08f))
+                                            .padding(vertical = 8.dp, horizontal = 5.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text(hour.time.substringAfter('T').take(5), color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.labelSmall)
+                                        Text(weatherEmoji(hour.code), fontSize = 19.sp)
+                                        Text("${hour.temperature.roundToInt()}°", color = Color.White, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+                                        Text("${hour.rainProbability}%", color = Color(0xFFB8DFFF), style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -575,22 +672,28 @@ fun LauncherScreen() {
 
             Spacer(Modifier.height(5.dp))
             Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                if (appsLoading && filteredApps.isEmpty()) {
+                if (appsLoading && visibleHomeApps.isEmpty()) {
                     Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = Color.White.copy(alpha = 0.8f), strokeWidth = 2.dp)
                     }
-                } else if (filteredApps.isEmpty()) {
+                } else if (visibleHomeApps.isEmpty()) {
                     Column(
                         modifier = Modifier.weight(1f).fillMaxHeight(),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Text("Nenhum aplicativo encontrado", color = Color.White.copy(alpha = 0.72f))
-                        TextButton(onClick = {
-                            AppRepository.invalidateCache()
-                            apps = emptyList()
-                            reloadAppsTrigger++
-                        }) { Text("Tentar novamente") }
+                        if (query.isNotBlank()) {
+                            Text("Nenhum aplicativo encontrado", color = Color.White.copy(alpha = 0.72f))
+                            TextButton(onClick = { query = "" }) { Text("Limpar busca") }
+                        } else {
+                            Text("Sua tela inicial está limpa", color = Color.White.copy(alpha = 0.88f), fontWeight = FontWeight.SemiBold)
+                            Text("Adicione seus apps favoritos para vê-los aqui.", color = Color.White.copy(alpha = 0.64f), style = MaterialTheme.typography.bodySmall)
+                            TextButton(onClick = { drawerOpen = true; query = "" }) {
+                                Icon(Icons.Default.Apps, contentDescription = null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Escolher aplicativos")
+                            }
+                        }
                     }
                 } else {
                     LazyColumn(
