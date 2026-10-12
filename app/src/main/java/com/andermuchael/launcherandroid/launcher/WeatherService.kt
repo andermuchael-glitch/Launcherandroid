@@ -44,13 +44,14 @@ fun cachedWeather(city: String): WeatherData? {
     }
 }
 
-fun fetchWeather(city: String): WeatherData? {
+fun fetchWeather(city: String, forceRefresh: Boolean = false): WeatherData? {
     val normalizedCity = city.trim()
     val now = System.currentTimeMillis()
-    if (normalizedCity.isNotBlank() &&
+    if (!forceRefresh &&
+        normalizedCity.isNotBlank() &&
         WeatherMemoryCache.city.equals(normalizedCity, ignoreCase = true) &&
         WeatherMemoryCache.data != null &&
-        now - WeatherMemoryCache.loadedAt < 50 * 60 * 1000L
+        now - WeatherMemoryCache.loadedAt < 3 * 60 * 60 * 1000L
     ) {
         return WeatherMemoryCache.data
     }
