@@ -99,6 +99,7 @@ fun LauncherScreen() {
     var reloadAppsTrigger by remember { mutableIntStateOf(0) }
     var query by remember { mutableStateOf("") }
     var drawerOpen by remember { mutableStateOf(false) }
+    var drawerStartLetter by remember { mutableStateOf<String?>(null) }
     var favorites by remember {
         mutableStateOf(
             context.getSharedPreferences("launcher", 0)
@@ -504,7 +505,9 @@ fun LauncherScreen() {
             onToggleFavorite = { app -> favorites = toggleFavorite(context, favorites, app.packageName) },
             onOpen = { app -> openApp(context, app.packageName) },
             onLongPress = { app -> longPressApp = app },
-            onClose = { drawerOpen = false; query = "" }
+            initialLetter = drawerStartLetter,
+            onInitialLetterConsumed = { drawerStartLetter = null },
+            onClose = { drawerOpen = false; query = ""; drawerStartLetter = null }
         )
         return
     }
@@ -797,11 +800,11 @@ fun LauncherScreen() {
                             fontSize = 9.sp,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.clickable {
-                                val target = homeLetterPositions[letter]
-                                    ?: homeLetterPositions.entries.minByOrNull {
-                                        kotlin.math.abs(it.key.first().code - letter.first().code)
-                                    }?.value
-                                if (target != null) homeScope.launch { homeListState.scrollToItem(target) }
+                                // A indexação da tela inicial abre a lista completa na letra escolhida,
+                                // mesmo quando aquela letra não possui favoritos.
+                                query = ""
+                                drawerStartLetter = letter
+                                drawerOpen = true
                             }
                         )
                     }
@@ -1446,7 +1449,8 @@ private fun SettingSwitch(title: String, subtitle: String, checked: Boolean, onC
 private fun AppDrawer(
     apps: List<AppInfo>, loading: Boolean, onReload: () -> Unit,
     query: String, themeName: String, iconStyle: String, iconSize: Float, onQueryChange: (String) -> Unit, favorites: Set<String>,
-    onToggleFavorite: (AppInfo) -> Unit, onOpen: (AppInfo) -> Unit, onLongPress: (AppInfo) -> Unit, onClose: () -> Unit
+    onToggleFavorite: (AppInfo) -> Unit, onOpen: (AppInfo) -> Unit, onLongPress: (AppInfo) -> Unit,
+    initialLetter: String?, onInitialLetterConsumed: () -> Unit, onClose: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -1478,6 +1482,20 @@ private fun AppDrawer(
 
     val alphabet = remember {
         ('A'..'Z').map { it.toString() } + "#"
+    }
+
+    LaunchedEffect(initialLetter, letterPositions) {
+        val requested = initialLetter
+        if (!requested.isNullOrBlank() && rows.isNotEmpty()) {
+            val target = letterPositions[requested]
+                ?: letterPositions.entries
+                    .filter { it.key != "#" && it.key.first() >= requested.first() }
+                    .minByOrNull { it.key }?.value
+                ?: letterPositions["#"]
+                ?: rows.lastIndex
+            listState.scrollToItem(target)
+            onInitialLetterConsumed()
+        }
     }
 
     Column(
