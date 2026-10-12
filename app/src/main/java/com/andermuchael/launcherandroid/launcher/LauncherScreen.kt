@@ -94,6 +94,8 @@ fun LauncherScreen() {
     val context = LocalContext.current
     val repository = remember { AppRepository(context) }
     var apps by remember { mutableStateOf(AppRepository.cachedApps()) }
+    var appsLoading by remember { mutableStateOf(false) }
+    var reloadAppsTrigger by remember { mutableIntStateOf(0) }
     var query by remember { mutableStateOf("") }
     var drawerOpen by remember { mutableStateOf(false) }
     var favorites by remember {
@@ -212,9 +214,14 @@ fun LauncherScreen() {
         }
     }
 
-    LaunchedEffect(Unit) {
-        if (apps.isEmpty()) {
-            apps = withContext(Dispatchers.IO) { repository.getLaunchableApps() }
+    LaunchedEffect(drawerOpen, reloadAppsTrigger) {
+        if (apps.isEmpty() && !appsLoading) {
+            appsLoading = true
+            try {
+                apps = withContext(Dispatchers.IO) { repository.getLaunchableApps() }
+            } finally {
+                appsLoading = false
+            }
         }
     }
 
@@ -431,6 +438,8 @@ fun LauncherScreen() {
     if (drawerOpen) {
         AppDrawer(
             apps = filteredApps,
+            loading = appsLoading,
+            onReload = { reloadAppsTrigger++ },
             query = query,
             themeName = themeName,
             iconStyle = iconStyle,
@@ -1228,7 +1237,8 @@ private fun SettingSwitch(title: String, subtitle: String, checked: Boolean, onC
 
 @Composable
 private fun AppDrawer(
-    apps: List<AppInfo>, query: String, themeName: String, iconStyle: String, iconSize: Float, onQueryChange: (String) -> Unit, favorites: Set<String>,
+    apps: List<AppInfo>, loading: Boolean, onReload: () -> Unit,
+    query: String, themeName: String, iconStyle: String, iconSize: Float, onQueryChange: (String) -> Unit, favorites: Set<String>,
     onToggleFavorite: (AppInfo) -> Unit, onOpen: (AppInfo) -> Unit, onLongPress: (AppInfo) -> Unit, onClose: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -1330,10 +1340,21 @@ private fun AppDrawer(
                     modifier = Modifier.weight(1f).fillMaxHeight(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        "Nenhum aplicativo encontrado",
-                        color = Color.White.copy(alpha = 0.55f)
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            if (loading) "Carregando aplicativos…" else "Nenhum aplicativo encontrado",
+                            color = Color.White.copy(alpha = 0.62f)
+                        )
+                        if (loading) {
+                            Spacer(Modifier.height(14.dp))
+                            CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 2.dp)
+                        } else {
+                            Spacer(Modifier.height(12.dp))
+                            TextButton(onClick = onReload) {
+                                Text("Tentar novamente")
+                            }
+                        }
+                    }
                 }
             } else {
                 LazyColumn(
