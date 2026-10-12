@@ -56,7 +56,6 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.AccessAlarm
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.produceState
@@ -193,21 +192,6 @@ fun LauncherScreen() {
     var noteDraft by remember { mutableStateOf("") }
     var locationLoading by remember { mutableStateOf(false) }
     var locationMessage by remember { mutableStateOf<String?>(null) }
-    var notifications by remember { mutableStateOf(LauncherNotificationListener.load(context)) }
-    var notificationAccessEnabled by remember { mutableStateOf(isNotificationAccessEnabled(context)) }
-
-    DisposableEffect(context) {
-        val receiver = object : android.content.BroadcastReceiver() {
-            override fun onReceive(ctx: Context?, intent: Intent?) {
-                notifications = LauncherNotificationListener.load(context)
-                notificationAccessEnabled = isNotificationAccessEnabled(context)
-            }
-        }
-        val filter = android.content.IntentFilter(LauncherNotificationListener.ACTION_NOTIFICATIONS_UPDATED)
-        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
-        onDispose { runCatching { context.unregisterReceiver(receiver) } }
-    }
-
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -557,74 +541,6 @@ fun LauncherScreen() {
             }
 
             Spacer(Modifier.height(8.dp))
-            if (!notificationAccessEnabled) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth().clickable {
-                        runCatching {
-                            context.startActivity(Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-                        }
-                    },
-                    shape = RoundedCornerShape(14.dp),
-                    color = Color.White.copy(alpha = 0.10f)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.Notifications, contentDescription = null, tint = Color.White.copy(alpha = 0.86f))
-                        Spacer(Modifier.width(9.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Notificações", color = Color.White, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
-                            Text("Toque para permitir acesso às notificações", color = Color.White.copy(alpha = 0.64f), style = MaterialTheme.typography.labelSmall)
-                        }
-                        Text("Ativar", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Notifications, contentDescription = null, tint = Color.White.copy(alpha = 0.76f), modifier = Modifier.size(17.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Notificações", color = Color.White.copy(alpha = 0.82f), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelMedium)
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        if (notifications.isEmpty()) "Nenhuma recente" else "${notifications.size} recentes",
-                        color = Color.White.copy(alpha = 0.55f),
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                }
-                if (notifications.isNotEmpty()) {
-                    notifications.take(2).forEach { notification ->
-                        Surface(
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp).clickable {
-                                openApp(context, notification.packageName)
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            color = Color.White.copy(alpha = 0.09f)
-                        ) {
-                            Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)) {
-                                Text(
-                                    notification.appName + " · " + notification.title,
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1
-                                )
-                                if (notification.text.isNotBlank()) {
-                                    Text(
-                                        notification.text,
-                                        color = Color.White.copy(alpha = 0.70f),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        maxLines = 2
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
 
             Spacer(Modifier.height(8.dp))
             Surface(
@@ -849,19 +765,6 @@ private fun MinimalAddFavoriteItem(onClick: () -> Unit) {
         Icon(Icons.Default.Add, contentDescription = "Adicionar favorito", tint = Color.White.copy(alpha = 0.35f), modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(12.dp))
         Text("Adicionar favorito", color = Color.White.copy(alpha = 0.35f), style = MaterialTheme.typography.bodyMedium)
-    }
-}
-
-private fun isNotificationAccessEnabled(context: Context): Boolean {
-    val enabled = android.provider.Settings.Secure.getString(
-        context.contentResolver,
-        "enabled_notification_listeners"
-    ).orEmpty()
-    return enabled.split(":").any { component ->
-        component.equals(
-            android.content.ComponentName(context, LauncherNotificationListener::class.java).flattenToString(),
-            ignoreCase = true
-        )
     }
 }
 
