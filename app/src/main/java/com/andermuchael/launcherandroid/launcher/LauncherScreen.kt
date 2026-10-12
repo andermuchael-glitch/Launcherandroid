@@ -8,6 +8,8 @@ import android.location.LocationManager
 import android.os.Looper
 import android.content.Intent
 import android.graphics.BitmapFactory
+import android.graphics.Bitmap
+import android.util.LruCache
 import android.app.WallpaperManager
 import android.app.ActivityManager
 import android.appwidget.AppWidgetHost
@@ -823,7 +825,7 @@ private fun MinimalFavoriteItem(
     onClick: () -> Unit,
     onLongPress: () -> Unit
 ) {
-    val iconBitmap = remember(app.packageName) { app.icon.toBitmap(96, 96).asImageBitmap() }
+    val iconBitmap = rememberAppIconBitmap(app)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -840,11 +842,15 @@ private fun MinimalFavoriteItem(
             tonalElevation = 2.dp
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Image(
-                    bitmap = iconBitmap,
-                    contentDescription = app.label,
-                    modifier = Modifier.size((iconSize * 0.76f).coerceIn(24f, 36f).dp).clip(iconShape(iconStyle))
-                )
+                if (iconBitmap != null) {
+                    Image(
+                        bitmap = iconBitmap,
+                        contentDescription = app.label,
+                        modifier = Modifier.size((iconSize * 0.76f).coerceIn(24f, 36f).dp).clip(iconShape(iconStyle))
+                    )
+                } else {
+                    Icon(Icons.Default.Apps, contentDescription = null, tint = Color.White.copy(alpha = 0.55f))
+                }
             }
         }
         Spacer(Modifier.width(12.dp))
@@ -1371,6 +1377,39 @@ private fun LauncherSettings(
     }
 }
 
+private object LauncherIconBitmapCache {
+    private val cache = object : LruCache<String, Bitmap>(3 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
+    }
+
+    fun get(packageName: String): Bitmap? = cache.get(packageName)
+
+    fun getOrCreate(packageName: String, create: () -> Bitmap): Bitmap {
+        cache.get(packageName)?.let { return it }
+        val bitmap = create()
+        return cache.get(packageName) ?: bitmap.also { cache.put(packageName, it) }
+    }
+
+    fun clear() = cache.evictAll()
+}
+
+@Composable
+private fun rememberAppIconBitmap(app: AppInfo): ImageBitmap? {
+    val bitmap by produceState<ImageBitmap?>(
+        initialValue = LauncherIconBitmapCache.get(app.packageName)?.asImageBitmap(),
+        key1 = app.packageName
+    ) {
+        if (value == null) {
+            value = withContext(Dispatchers.IO) {
+                LauncherIconBitmapCache.getOrCreate(app.packageName) {
+                    app.icon.toBitmap(96, 96, Bitmap.Config.ARGB_8888)
+                }.asImageBitmap()
+            }
+        }
+    }
+    return bitmap
+}
+
 private fun decodeWallpaper(context: Context, uri: Uri): ImageBitmap? {
     return runCatching {
         val resolver = context.contentResolver
@@ -1682,7 +1721,7 @@ private sealed interface DrawerRow {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun NiagaraAppRow(app: AppInfo, isFavorite: Boolean, iconStyle: String, iconSize: Float, accent: Color, onClick: () -> Unit, onLongPress: () -> Unit) {
-    val iconBitmap = remember(app.packageName) { app.icon.toBitmap(96, 96).asImageBitmap() }
+    val iconBitmap = rememberAppIconBitmap(app)
     Row(
         modifier = Modifier.fillMaxWidth().height(maxOf(48f, iconSize + 4f).dp)
             .clip(RoundedCornerShape(14.dp))
@@ -1696,7 +1735,11 @@ private fun NiagaraAppRow(app: AppInfo, isFavorite: Boolean, iconStyle: String, 
             color = accent.copy(alpha = 0.14f)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Image(bitmap = iconBitmap, contentDescription = app.label, modifier = Modifier.size((iconSize * 0.76f).coerceIn(24f, 36f).dp).clip(iconShape(iconStyle)))
+                if (iconBitmap != null) {
+                    Image(bitmap = iconBitmap, contentDescription = app.label, modifier = Modifier.size((iconSize * 0.76f).coerceIn(24f, 36f).dp).clip(iconShape(iconStyle)))
+                } else {
+                    Icon(Icons.Default.Apps, contentDescription = null, tint = Color.White.copy(alpha = 0.55f))
+                }
             }
         }
         Spacer(Modifier.width(12.dp))
@@ -1718,12 +1761,16 @@ private fun QuickAppItem(app: AppInfo, onClick: () -> Unit) {
         modifier = Modifier.width(58.dp).clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        val iconBitmap = remember(app.packageName) { app.icon.toBitmap(96, 96).asImageBitmap() }
-        Image(
-            bitmap = iconBitmap,
-            contentDescription = app.label,
-            modifier = Modifier.size(48.dp).clip(RoundedCornerShape(14.dp))
-        )
+        val iconBitmap = rememberAppIconBitmap(app)
+        if (iconBitmap != null) {
+            Image(
+                bitmap = iconBitmap,
+                contentDescription = app.label,
+                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(14.dp))
+            )
+        } else {
+            Icon(Icons.Default.Apps, contentDescription = null, modifier = Modifier.size(48.dp), tint = Color.White.copy(alpha = 0.55f))
+        }
         Text(
             app.label,
             color = Color.White.copy(alpha = 0.82f),
@@ -1737,16 +1784,20 @@ private fun QuickAppItem(app: AppInfo, onClick: () -> Unit) {
 
 @Composable
 private fun RowScope.FavoriteDockItem(app: AppInfo, iconSize: Float, onClick: () -> Unit) {
-    val iconBitmap = remember(app.packageName) { app.icon.toBitmap(96, 96).asImageBitmap() }
+    val iconBitmap = rememberAppIconBitmap(app)
     Column(
         modifier = Modifier.weight(1f).clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Image(
-            bitmap = iconBitmap,
-            contentDescription = app.label,
-            modifier = Modifier.size(48.dp).clip(RoundedCornerShape(14.dp))
-        )
+        if (iconBitmap != null) {
+            Image(
+                bitmap = iconBitmap,
+                contentDescription = app.label,
+                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(14.dp))
+            )
+        } else {
+            Icon(Icons.Default.Apps, contentDescription = null, modifier = Modifier.size(48.dp), tint = Color.White.copy(alpha = 0.55f))
+        }
         Text(
             app.label,
             color = Color.White.copy(alpha = 0.86f),
@@ -1800,10 +1851,14 @@ private fun AppItem(app: AppInfo, isFavorite: Boolean, onClick: () -> Unit, onTo
 
 @Composable
 private fun RowScope.FavoriteItem(app: AppInfo, onClick: () -> Unit) {
-    val iconBitmap = remember(app.packageName) { app.icon.toBitmap(96, 96).asImageBitmap() }
+    val iconBitmap = rememberAppIconBitmap(app)
     Column(modifier = Modifier.weight(1f).clickable(onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(shape = RoundedCornerShape(17.dp), color = Color.White.copy(alpha = 0.10f)) {
-            Image(bitmap = iconBitmap, contentDescription = app.label, modifier = Modifier.padding(7.dp).size(48.dp))
+            if (iconBitmap != null) {
+                Image(bitmap = iconBitmap, contentDescription = app.label, modifier = Modifier.padding(7.dp).size(48.dp))
+            } else {
+                Icon(Icons.Default.Apps, contentDescription = null, modifier = Modifier.padding(7.dp).size(48.dp), tint = Color.White.copy(alpha = 0.55f))
+            }
         }
         Text(app.label, color = Color.White.copy(alpha = 0.82f), maxLines = 1, textAlign = TextAlign.Center,
             style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 5.dp))
@@ -1813,9 +1868,15 @@ private fun RowScope.FavoriteItem(app: AppInfo, onClick: () -> Unit) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AppIcon(app: AppInfo, onClick: () -> Unit, onLongPress: () -> Unit) {
-    val iconBitmap = remember(app.packageName) { app.icon.toBitmap(112, 112).asImageBitmap() }
-    Image(bitmap = iconBitmap, contentDescription = app.label,
-        modifier = Modifier.size(52.dp).clip(RoundedCornerShape(15.dp)).combinedClickable(onClick = onClick, onLongClick = onLongPress))
+    val iconBitmap = rememberAppIconBitmap(app)
+    if (iconBitmap != null) {
+        Image(bitmap = iconBitmap, contentDescription = app.label,
+            modifier = Modifier.size(52.dp).clip(RoundedCornerShape(15.dp)).combinedClickable(onClick = onClick, onLongClick = onLongPress))
+    } else {
+        Icon(Icons.Default.Apps, contentDescription = app.label,
+            modifier = Modifier.size(52.dp).clip(RoundedCornerShape(15.dp)).combinedClickable(onClick = onClick, onLongClick = onLongPress),
+            tint = Color.White.copy(alpha = 0.55f))
+    }
 }
 
 data class LauncherFolder(val id: String, val name: String, val packages: List<String>)
