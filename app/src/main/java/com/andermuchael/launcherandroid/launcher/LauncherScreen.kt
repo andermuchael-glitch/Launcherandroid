@@ -56,6 +56,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.AccessAlarm
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.produceState
@@ -192,6 +193,20 @@ fun LauncherScreen() {
     var noteDraft by remember { mutableStateOf("") }
     var locationLoading by remember { mutableStateOf(false) }
     var locationMessage by remember { mutableStateOf<String?>(null) }
+    var notifications by remember { mutableStateOf(LauncherNotificationListener.load(context)) }
+    var notificationAccessEnabled by remember { mutableStateOf(isNotificationAccessEnabled(context)) }
+
+    DisposableEffect(context) {
+        val receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(ctx: Context?, intent: Intent?) {
+                notifications = LauncherNotificationListener.load(context)
+                notificationAccessEnabled = isNotificationAccessEnabled(context)
+            }
+        }
+        val filter = android.content.IntentFilter(LauncherNotificationListener.ACTION_NOTIFICATIONS_UPDATED)
+        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        onDispose { runCatching { context.unregisterReceiver(receiver) } }
+    }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -231,6 +246,26 @@ fun LauncherScreen() {
     val filteredApps = remember(apps, query) {
         if (query.isBlank()) apps
         else apps.filter { it.label.contains(query, ignoreCase = true) }
+    }
+    val homeListState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val homeScope = rememberCoroutineScope()
+    val homeAlphabet = remember { ('A'..'Z').map { it.toString() } + "#" }
+    val homeGroupedApps = remember(filteredApps) {
+        filteredApps.groupBy { it.label.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "#" }
+            .toSortedMap(compareBy { if (it == "#") "{" else it })
+    }
+    val homeRows = remember(homeGroupedApps) {
+        buildList {
+            homeGroupedApps.forEach { (letter, letterApps) ->
+                add(DrawerRow.Header(letter))
+                letterApps.forEach { app -> add(DrawerRow.App(app)) }
+            }
+        }
+    }
+    val homeLetterPositions = remember(homeRows) {
+        homeRows.mapIndexedNotNull { index, row ->
+            if (row is DrawerRow.Header) row.letter to index else null
+        }.toMap()
     }
     val appsByPackage = remember(apps) { apps.associateBy { it.packageName } }
     val favoriteApps = remember(favorites, appsByPackage) {
@@ -459,184 +494,302 @@ fun LauncherScreen() {
             .fillMaxSize()
             .background(launcherBackground(themeName))
     ) {
-        val currentWallpaper = wallpaperBitmap
-        if (currentWallpaper != null) {
-            Image(bitmap = currentWallpaper, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = wallpaperDim)))
+        wallpaperBitmap?.let { image ->
+            Image(
+                bitmap = image,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = wallpaperDim.coerceAtLeast(0.18f))))
         }
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 8.dp)
+                .padding(start = 18.dp, end = 12.dp, top = 10.dp, bottom = 6.dp)
         ) {
-            Spacer(Modifier.height(30.dp))
-            ClockAndDate(showDate = showDate, clockSize = clockSize, onAlarm = { openAlarm(context) })
-            if (weatherCity.isNotBlank()) {
-                Spacer(Modifier.height(10.dp))
-                WeatherCard(
-                    weather = weather,
-                    configuredCity = weatherCity,
-                    expanded = weatherExpanded,
-                    onToggle = { weatherExpanded = !weatherExpanded }
-                )
+            Spacer(Modifier.height(20.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    CompactClockAndDate(showDate = showDate, onAlarm = { openAlarm(context) })
+                    if (weatherCity.isNotBlank()) {
+                        Spacer(Modifier.height(2.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                weather?.let { weatherDescription(it.code) } ?: "Clima de $weatherCity",
+                                color = Color.White.copy(alpha = 0.78f),
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                weather?.let { "${it.temperature.roundToInt()}°" } ?: "…",
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+                IconButton(onClick = { settingsOpen = true }) {
+                    Icon(Icons.Default.Settings, contentDescription = "Configurar", tint = Color.White.copy(alpha = 0.82f))
+                }
             }
+
             if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                Spacer(Modifier.height(8.dp))
                 key(widgetId) {
                     AndroidView(
                         factory = {
                             val info = AppWidgetManager.getInstance(context).getAppWidgetInfo(widgetId)
-                            if (info != null) {
-                                appWidgetHost.createView(context, widgetId, info).also { it.setAppWidget(widgetId, info) }
-                            } else {
-                                android.widget.TextView(context).apply {
-                                    text = "Widget indisponível. Remova e adicione novamente nas configurações."
-                                    setTextColor(android.graphics.Color.WHITE)
-                                    setPadding(20, 20, 20, 20)
-                                    setBackgroundColor(android.graphics.Color.DKGRAY)
-                                }
+                            if (info != null) appWidgetHost.createView(context, widgetId, info).also { it.setAppWidget(widgetId, info) }
+                            else android.widget.TextView(context).apply {
+                                text = "Widget indisponível. Remova e adicione novamente nas configurações."
+                                setTextColor(android.graphics.Color.WHITE)
+                                setPadding(12, 10, 12, 10)
+                                setBackgroundColor(android.graphics.Color.DKGRAY)
                             }
                         },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp, max = 260.dp).clip(RoundedCornerShape(18.dp))
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp, max = 150.dp).clip(RoundedCornerShape(16.dp))
                     )
                 }
-                Spacer(Modifier.height(10.dp))
             }
-            Spacer(Modifier.height(if (compactMode) 12.dp else 18.dp))
-            SearchField(value = query, onQueryChange = { query = it; drawerOpen = true })
 
-            Spacer(Modifier.height(10.dp))
-            QuickNotesWidget(
-                notes = quickNotes,
-                draft = noteDraft,
-                onDraftChange = { noteDraft = it },
-                onAdd = {
-                    val text = noteDraft.trim()
-                    if (text.isNotEmpty()) {
-                        quickNotes = (quickNotes + text).takeLast(5)
-                        saveQuickNotes(prefs, quickNotes)
-                        noteDraft = ""
+            Spacer(Modifier.height(8.dp))
+            if (!notificationAccessEnabled) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        runCatching {
+                            context.startActivity(Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                        }
+                    },
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color.White.copy(alpha = 0.10f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Notifications, contentDescription = null, tint = Color.White.copy(alpha = 0.86f))
+                        Spacer(Modifier.width(9.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Notificações", color = Color.White, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
+                            Text("Toque para permitir acesso às notificações", color = Color.White.copy(alpha = 0.64f), style = MaterialTheme.typography.labelSmall)
+                        }
+                        Text("Ativar", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
                     }
-                },
-                onDelete = { note ->
-                    quickNotes = quickNotes.filterNot { it == note }
-                    saveQuickNotes(prefs, quickNotes)
                 }
-            )
-
-            if (folders.isNotEmpty()) {
-                Spacer(Modifier.height(12.dp))
-                Text("Pastas", color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.labelLarge)
-                Spacer(Modifier.height(8.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    folders.take(3).forEach { folder ->
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Notifications, contentDescription = null, tint = Color.White.copy(alpha = 0.76f), modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Notificações", color = Color.White.copy(alpha = 0.82f), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelMedium)
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        if (notifications.isEmpty()) "Nenhuma recente" else "${notifications.size} recentes",
+                        color = Color.White.copy(alpha = 0.55f),
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+                if (notifications.isNotEmpty()) {
+                    notifications.take(2).forEach { notification ->
                         Surface(
-                            modifier = Modifier.weight(1f).height(54.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            color = Color.White.copy(alpha = 0.07f)
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp).clickable {
+                                openApp(context, notification.packageName)
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color.White.copy(alpha = 0.09f)
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxSize().padding(start = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    modifier = Modifier.weight(1f).fillMaxHeight().clickable {
-                                        selectedFolder = folder
-                                        folderOpen = true
-                                    },
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Default.Folder, contentDescription = null, tint = Color.White.copy(alpha = 0.72f), modifier = Modifier.size(20.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Column {
-                                        Text(folder.name, color = Color.White, maxLines = 1, style = MaterialTheme.typography.labelMedium)
-                                        Text("${folder.packages.size}", color = Color.White.copy(alpha = 0.45f), style = MaterialTheme.typography.labelSmall)
-                                    }
-                                }
-                                IconButton(
-                                    onClick = {
-                                        selectedFolder = folder
-                                        folderDialog = true
-                                    },
-                                    modifier = Modifier.size(42.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.MoreVert,
-                                        contentDescription = "Editar pasta",
-                                        tint = Color.White.copy(alpha = 0.55f),
-                                        modifier = Modifier.size(20.dp)
+                            Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)) {
+                                Text(
+                                    notification.appName + " · " + notification.title,
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1
+                                )
+                                if (notification.text.isNotBlank()) {
+                                    Text(
+                                        notification.text,
+                                        color = Color.White.copy(alpha = 0.70f),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        maxLines = 2
                                     )
                                 }
                             }
                         }
                     }
-                    if (folders.size < 3) {
-                        Surface(
-                            modifier = Modifier.weight(1f).height(54.dp).clickable { folderDialog = true },
-                            shape = RoundedCornerShape(16.dp),
-                            color = Color.White.copy(alpha = 0.05f)
-                        ) {
-                            Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Add, contentDescription = "Nova pasta", tint = Color.White.copy(alpha = 0.62f), modifier = Modifier.size(20.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Nova pasta", color = Color.White.copy(alpha = 0.62f), style = MaterialTheme.typography.labelMedium)
-                            }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Surface(
+                modifier = Modifier.fillMaxWidth().height(44.dp),
+                shape = RoundedCornerShape(22.dp),
+                color = Color.White.copy(alpha = 0.12f)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Search, contentDescription = null, tint = Color.White.copy(alpha = 0.68f))
+                    Spacer(Modifier.width(9.dp))
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        textStyle = LocalTextStyle.current.copy(color = Color.White, fontSize = 15.sp),
+                        decorationBox = { inner ->
+                            if (query.isBlank()) Text("Buscar aplicativos", color = Color.White.copy(alpha = 0.55f))
+                            inner()
+                        }
+                    )
+                    if (query.isNotBlank()) {
+                        IconButton(onClick = { query = "" }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = "Limpar busca", tint = Color.White.copy(alpha = 0.72f), modifier = Modifier.size(18.dp))
                         }
                     }
                 }
             }
 
-            Spacer(Modifier.height(if (compactMode) 12.dp else 18.dp))
-            Text("Favoritos", color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.labelLarge)
-            Spacer(Modifier.height(8.dp))
-
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                favoriteApps.take(12).forEach { app ->
-                    MinimalFavoriteItem(
-                        app = app,
-                        iconSize = iconSize,
-                        iconStyle = iconStyle,
-                        onClick = { openApp(context, app.packageName) },
-                        onLongPress = { longPressApp = app }
-                    )
+            Spacer(Modifier.height(5.dp))
+            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                if (appsLoading && filteredApps.isEmpty()) {
+                    Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Color.White.copy(alpha = 0.8f), strokeWidth = 2.dp)
+                    }
+                } else if (filteredApps.isEmpty()) {
+                    Column(
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text("Nenhum aplicativo encontrado", color = Color.White.copy(alpha = 0.72f))
+                        TextButton(onClick = {
+                            AppRepository.invalidateCache()
+                            apps = emptyList()
+                            reloadAppsTrigger++
+                        }) { Text("Tentar novamente") }
+                    }
+                } else {
+                    LazyColumn(
+                        state = homeListState,
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                        contentPadding = PaddingValues(top = 2.dp, bottom = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(1.dp)
+                    ) {
+                        items(
+                            homeRows,
+                            key = { row ->
+                                when (row) {
+                                    is DrawerRow.Header -> "home_header_${row.letter}"
+                                    is DrawerRow.App -> "home_app_${row.app.packageName}"
+                                }
+                            }
+                        ) { row ->
+                            when (row) {
+                                is DrawerRow.Header -> Text(
+                                    row.letter,
+                                    color = Color.White.copy(alpha = 0.46f),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(start = 8.dp, top = 5.dp, bottom = 1.dp)
+                                )
+                                is DrawerRow.App -> NiagaraAppRow(
+                                    app = row.app,
+                                    isFavorite = row.app.packageName in favorites,
+                                    iconStyle = iconStyle,
+                                    iconSize = iconSize,
+                                    accent = themeAccent(themeName),
+                                    onClick = { openApp(context, row.app.packageName) },
+                                    onLongPress = { longPressApp = row.app }
+                                )
+                            }
+                        }
+                        item(key = "home_quick_notes") {
+                            Spacer(Modifier.height(8.dp))
+                            QuickNotesWidget(
+                                notes = quickNotes,
+                                draft = noteDraft,
+                                onDraftChange = { noteDraft = it },
+                                onAdd = {
+                                    val text = noteDraft.trim()
+                                    if (text.isNotEmpty()) {
+                                        quickNotes = (quickNotes + text).takeLast(5)
+                                        saveQuickNotes(prefs, quickNotes)
+                                        noteDraft = ""
+                                    }
+                                },
+                                onDelete = { note ->
+                                    quickNotes = quickNotes.filterNot { it == note }
+                                    saveQuickNotes(prefs, quickNotes)
+                                }
+                            )
+                        }
+                        if (folders.isNotEmpty()) {
+                            item(key = "home_folders") {
+                                Spacer(Modifier.height(8.dp))
+                                Text("Pastas", color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.labelMedium)
+                                folders.forEach { folder ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                                            .clickable { selectedFolder = folder; folderOpen = true }
+                                            .padding(horizontal = 8.dp, vertical = 9.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.Folder, contentDescription = null, tint = Color.White.copy(alpha = 0.76f))
+                                        Spacer(Modifier.width(10.dp))
+                                        Text(folder.name, color = Color.White, modifier = Modifier.weight(1f), maxLines = 1)
+                                        Text("${folder.packages.size}", color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.labelSmall)
+                                        IconButton(onClick = { selectedFolder = folder; folderDialog = true }) {
+                                            Icon(Icons.Default.MoreVert, contentDescription = "Editar pasta", tint = Color.White.copy(alpha = 0.70f))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        item(key = "home_settings_footer") {
+                            TextButton(
+                                onClick = { settingsOpen = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = 0.72f))
+                            ) {
+                                Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(17.dp))
+                                Spacer(Modifier.width(7.dp))
+                                Text("Configurar Launcher")
+                            }
+                        }
+                    }
                 }
-                MinimalAddFavoriteItem { drawerOpen = true }
+
+                Spacer(Modifier.width(3.dp))
+                Column(
+                    modifier = Modifier.width(22.dp).fillMaxHeight().padding(vertical = 2.dp),
+                    verticalArrangement = Arrangement.SpaceEvenly,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    homeAlphabet.forEach { letter ->
+                        Text(
+                            letter,
+                            color = Color.White.copy(alpha = 0.74f),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clickable {
+                                val target = homeLetterPositions[letter]
+                                    ?: homeLetterPositions.entries.minByOrNull {
+                                        kotlin.math.abs(it.key.first().code - letter.first().code)
+                                    }?.value
+                                if (target != null) homeScope.launch { homeListState.scrollToItem(target) }
+                            }
+                        )
+                    }
+                }
             }
-
-            Spacer(Modifier.height(12.dp))
-
-            TextButton(
-                onClick = { settingsOpen = true },
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-                colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = 0.62f))
-            ) {
-                Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(7.dp))
-                Text("Configurar")
-            }
-
-            Spacer(Modifier.height(4.dp))
-
-            FilledTonalButton(
-                onClick = { drawerOpen = true },
-                modifier = Modifier.align(Alignment.CenterHorizontally).height(48.dp),
-                shape = RoundedCornerShape(24.dp),
-                colors = ButtonDefaults.filledTonalButtonColors(
-                    containerColor = Color.White.copy(alpha = 0.09f),
-                    contentColor = Color.White
-                )
-            ) {
-                Icon(Icons.Default.Apps, contentDescription = null, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Todos os aplicativos")
-            }
-
-            Spacer(Modifier.height(8.dp))
-            Text("Deslize para cima", modifier = Modifier.align(Alignment.CenterHorizontally), color = Color.White.copy(alpha = 0.35f), style = MaterialTheme.typography.labelSmall)
         }
     }
 }
@@ -696,6 +849,56 @@ private fun MinimalAddFavoriteItem(onClick: () -> Unit) {
         Icon(Icons.Default.Add, contentDescription = "Adicionar favorito", tint = Color.White.copy(alpha = 0.35f), modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(12.dp))
         Text("Adicionar favorito", color = Color.White.copy(alpha = 0.35f), style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+private fun isNotificationAccessEnabled(context: Context): Boolean {
+    val enabled = android.provider.Settings.Secure.getString(
+        context.contentResolver,
+        "enabled_notification_listeners"
+    ).orEmpty()
+    return enabled.split(":").any { component ->
+        component.equals(
+            android.content.ComponentName(context, LauncherNotificationListener::class.java).flattenToString(),
+            ignoreCase = true
+        )
+    }
+}
+
+@Composable
+private fun CompactClockAndDate(showDate: Boolean, onAlarm: () -> Unit) {
+    var now by remember { mutableStateOf(Date()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            now = Date()
+            delay(15_000)
+        }
+    }
+    val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(now)
+    val date = SimpleDateFormat("dd 'DE' MMM", Locale("pt", "BR")).format(now).uppercase(Locale("pt", "BR"))
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onAlarm),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            time,
+            color = Color.White,
+            fontSize = 42.sp,
+            fontWeight = FontWeight.Light,
+            letterSpacing = (-1.5).sp,
+            fontFamily = FontFamily.SansSerif
+        )
+        Spacer(Modifier.width(12.dp))
+        if (showDate) {
+            Text(
+                date,
+                color = Color.White.copy(alpha = 0.82f),
+                fontSize = 12.sp,
+                letterSpacing = 2.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1
+            )
+        }
     }
 }
 
