@@ -449,11 +449,6 @@ fun LauncherScreen() {
         modifier = Modifier
             .fillMaxSize()
             .background(launcherBackground(themeName))
-            .pointerInput(Unit) {
-                detectVerticalDragGestures { _, dragAmount ->
-                    if (dragAmount < -24f) drawerOpen = true
-                }
-            }
     ) {
         val currentWallpaper = wallpaperBitmap
         if (currentWallpaper != null) {
@@ -464,6 +459,7 @@ fun LauncherScreen() {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 8.dp)
         ) {
             Spacer(Modifier.height(30.dp))
@@ -586,11 +582,11 @@ fun LauncherScreen() {
             Text("Favoritos", color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.labelLarge)
             Spacer(Modifier.height(8.dp))
 
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
+            Column(
+                modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                items(favoriteApps.take(12), key = { it.packageName }) { app ->
+                favoriteApps.take(12).forEach { app ->
                     MinimalFavoriteItem(
                         app = app,
                         iconSize = iconSize,
@@ -599,12 +595,10 @@ fun LauncherScreen() {
                         onLongPress = { longPressApp = app }
                     )
                 }
-                item {
-                    MinimalAddFavoriteItem { drawerOpen = true }
-                }
+                MinimalAddFavoriteItem { drawerOpen = true }
             }
 
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(12.dp))
 
             TextButton(
                 onClick = { settingsOpen = true },
