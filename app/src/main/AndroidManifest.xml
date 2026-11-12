@@ -6,8 +6,6 @@
     <uses-permission android:name="android.permission.SET_WALLPAPER" />
     <uses-permission android:name="android.permission.BIND_APPWIDGET" />
 
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
-
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN" />
@@ -28,7 +26,9 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:alwaysRetainTaskState="true"
-            android:finishOnTaskLaunch="false">
+            android:finishOnTaskLaunch="false"
+            android:configChanges="orientation|keyboardHidden|screenSize|uiMode|smallestScreenSize"
+            android:stateNotNeeded="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.HOME" />
